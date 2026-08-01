@@ -27,16 +27,23 @@ if (Test-Path $EnvFile) {
 
 $Port = if ($env:PROXY_PORT) { $env:PROXY_PORT } else { "8787" }
 
-# Run the interactive setup wizard on first run or when --setup is passed.
+# Config is created separately via `npm run setup` (or scripts/run.ps1 --setup).
+# Refuse to launch without it so the user gets a clear "run setup first" message
+# instead of a cryptic proxy error.
+$EnvFile = Join-Path $Root ".env"
 $SetupFlag = $false
 foreach ($arg in $args) { if ($arg -eq "--setup") { $SetupFlag = $true } }
-$EnvFile = Join-Path $Root ".env"
-if (-not (Test-Path $EnvFile) -or $SetupFlag) {
+if ($SetupFlag) {
   Write-Host "Running setup wizard ..."
   $SetupTs = Join-Path $Root "src\setup.ts"
   $TsxCli = Join-Path $Root "node_modules\tsx\dist\cli.mjs"
   & node $TsxCli $SetupTs
-  if ($LASTEXITCODE -ne 0) { Write-Host "Wizard exited with code $LASTEXITCODE, continuing." }
+  if ($LASTEXITCODE -ne 0) { Write-Host "Wizard exited with code $LASTEXITCODE."; exit $LASTEXITCODE }
+  exit 0
+}
+if (-not (Test-Path $EnvFile)) {
+  Write-Host "No .env found. Run 'npm run setup' first to configure your backend, then 'npm run claude' to launch."
+  exit 1
 }
 
 # Locate the claude CLI.
