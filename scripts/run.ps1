@@ -89,6 +89,15 @@ try {
   # leave the real key alone (user must authenticate normally).
   if ($env:USE_OPENAI_API -eq "1") {
     $env:ANTHROPIC_API_KEY = "claude-code-free-dummy-key"
+    # claude prefers stored OAuth credentials over the env-var key; an
+    # expired token in the user's real ~/.claude/.credentials.json makes
+    # it show "Login expired" and ignore our dummy key. Point the CLI at
+    # a throwaway config dir for this session so it falls back to the
+    # env-var key. Only used in OpenAI-routing mode (passthrough keeps the
+    # real profile so the user's normal auth / settings apply).
+    $CleanConfig = Join-Path $env:TEMP "claude-code-free-config"
+    if (-not (Test-Path $CleanConfig)) { New-Item -ItemType Directory -Path $CleanConfig -Force | Out-Null }
+    $env:CLAUDE_CONFIG_DIR = $CleanConfig
   }
 
   Write-Host "Launching: $ClaudeBin"
