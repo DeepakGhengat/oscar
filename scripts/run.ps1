@@ -2,6 +2,29 @@
 $ErrorActionPreference = "Stop"
 
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
+
+# Load .env into this PowerShell session (so USE_OPENAI_API etc. are
+# visible to the launch logic below). Explicit env vars already set in
+# the shell win over .env values — we only set ones that are unset.
+$EnvFile = Join-Path $Root ".env"
+if (Test-Path $EnvFile) {
+  Get-Content $EnvFile | ForEach-Object {
+    $line = $_.Trim()
+    if (-not $line -or $line.StartsWith("#")) { return }
+    $idx = $line.IndexOf("=")
+    if ($idx -le 0) { return }
+    $key = $line.Substring(0, $idx).Trim()
+    $val = $line.Substring($idx + 1).Trim()
+    # strip surrounding quotes
+    if ($val.Length -ge 2 -and (($val.StartsWith('"') -and $val.EndsWith('"')) -or ($val.StartsWith("'") -and $val.EndsWith("'")))) {
+      $val = $val.Substring(1, $val.Length - 2)
+    }
+    if (-not [Environment]::GetEnvironmentVariable($key, "Process")) {
+      [Environment]::SetEnvironmentVariable($key, $val, "Process")
+    }
+  }
+}
+
 $Port = if ($env:PROXY_PORT) { $env:PROXY_PORT } else { "8787" }
 
 # Run the interactive setup wizard on first run or when --setup is passed.
