@@ -6,6 +6,16 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PORT="${PROXY_PORT:-8787}"
 
+# Run the interactive setup wizard on first run or when --setup is passed.
+SETUP_FLAG=0
+for arg in "$@"; do [ "$arg" = "--setup" ] && SETUP_FLAG=1; done
+if [ ! -f "$ROOT/.env" ] || [ "$SETUP_FLAG" = "1" ]; then
+  echo "Running setup wizard ..."
+  npx tsx "$ROOT/src/setup.ts" || true
+  # If the wizard already started the proxy, .env exists but we still continue
+  # to launch the CLI below against the (possibly already-running) proxy.
+fi
+
 # Locate the claude CLI. The SDK ships as a native binary (bin/claude / claude.exe);
 # fall back to whatever is on PATH.
 CLAUDE_BIN=""
