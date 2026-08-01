@@ -170,6 +170,60 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Bootstrap interception: claude GETs /v1/me on startup and uses
+  // `additional_model_options` in the response to populate the /model menu.
+  // When OpenAI routing is on, inject every backend model as a menu entry so
+  // /model shows the real backend models (glm-5.2, deepseek-v4-pro, ...) and
+  // picking one routes to it (proxy.ts honors body.model when it's a known
+  // backend model). We forward to real Anthropic first to keep the rest of
+  // the /v1/me payload intact, then splice in our options.
+  if (method === "GET" && path === "/v1/me" && cfg.useOpenAI) {
+    const c = loadConfig();
+    try {
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      if (c.openAIKey) headers.authorization = `Bearer ${c.openAIKey}`;
+      const backendIds = await probeModels(c.openAIBaseURL, (url, init) =>
+        fetch(url, {
+          ...init,
+          headers: { ...headers, ...((init?.headers as Record<string, string>) ?? {}) },
+        } as RequestInit),
+      );
+      const additionalModelOptions = backendIds.map((id) => ({
+        model: id,
+        name: id,
+        description: "Backend model",
+      }));
+
+      // Forward to real Anthropic for the base payload; if that fails (e.g.
+      // dummy key / no network), fall back to a minimal stub that still
+      // carries the model options so the menu populates.
+      let baseJson: Record<string, unknown> = {};
+      let status = 200;
+      try {
+        const init: RequestInit = { method, headers: toWebHeaders(req.headers) };
+        const upstream = await fetch(`${cfg.anthropicBaseURL}${path}`, init);
+        status = upstream.status;
+        if (upstream.ok) {
+          const text = await upstream.text();
+          if (text) baseJson = JSON.parse(text) as Record<string, unknown>;
+        }
+      } catch {
+        // keep stub
+      }
+
+      baseJson.additional_model_options = additionalModelOptions;
+      sendJSON(res, status, baseJson);
+      console.log(
+        `[${new Date().toISOString()}] GET /v1/me → injected ${additionalModelOptions.length} backend model option(s)`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[error] /v1/me interception: ${msg}`);
+      sendJSON(res, 500, { error: { type: "proxy_error", message: msg } });
+    }
+    return;
+  }
+
   // Fallback: pass any other path straight to Anthropic (count_tokens, models...).
   const body = await readBody(req);
   const init: RequestInit = { method, headers: toWebHeaders(req.headers) };
