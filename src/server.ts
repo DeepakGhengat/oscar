@@ -82,12 +82,13 @@ const server = createServer(async (req, res) => {
   if (method === "POST" && path === "/v1/messages") {
     const body = await readBody(req);
     try {
-      const { response, route } = await routeMessageRequest(
+      const { response, route, incomingModel, upstreamModel } = await routeMessageRequest(
         body.length ? new Uint8Array(body) : undefined,
         toWebHeaders(req.headers),
       );
       console.log(
-        `[${new Date().toISOString()}] POST /v1/messages → ${route} (${response.status})`,
+        `[${new Date().toISOString()}] POST /v1/messages → ${route} (${response.status})` +
+          (incomingModel ? `  model: ${incomingModel} → ${upstreamModel ?? incomingModel}` : ""),
       );
       writeWebResponse(res, response.status, response.headers);
       // Stream the (possibly ReadableStream) body back through Node.

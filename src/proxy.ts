@@ -168,6 +168,8 @@ async function passthroughAnthropic(
 export interface RouteResult {
   response: Response;
   route: "openai" | "anthropic" | "passthrough";
+  incomingModel?: string;
+  upstreamModel?: string;
 }
 
 export async function routeMessageRequest(
@@ -179,9 +181,19 @@ export async function routeMessageRequest(
 
   if (cfg.useOpenAI && parsed) {
     const response = await callOpenAI(cfg, parsed);
-    return { response, route: "openai" };
+    return {
+      response,
+      route: "openai",
+      incomingModel: parsed.model,
+      upstreamModel: cfg.openAIModel ?? parsed.model,
+    };
   }
   // Passthrough: keep native Anthropic behaviour intact.
   const response = await passthroughAnthropic(cfg, "/v1/messages", "POST", headers, body);
-  return { response, route: "anthropic" };
+  return {
+    response,
+    route: "anthropic",
+    incomingModel: parsed?.model,
+    upstreamModel: parsed?.model,
+  };
 }
