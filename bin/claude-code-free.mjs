@@ -131,6 +131,25 @@ async function main() {
     process.exit(process.env.CCF_SETUP_EXIT ?? 0);
   }
 
+  // --model: probe the configured backend, let the user pick a model,
+  // rewrite OPENAI_MODEL in .env, then exit (re-run without --model to
+  // launch). If --model is combined with other args, we still just switch
+  // and exit — the user can launch separately.
+  if (args.includes("--model")) {
+    const dir = configDir();
+    if (process.env.CLAUDE_CODE_FREE_CONFIG === undefined) {
+      process.env.CLAUDE_CODE_FREE_CONFIG = dir;
+    }
+    const tsx = findTsx();
+    const pickerTs = join(PKG_ROOT, "src", "modelpicker.ts");
+    if (tsx) {
+      await runNode([tsx, pickerTs], { stdio: "inherit" });
+    } else {
+      await runNode(["tsx", pickerTs], { stdio: "inherit", useNpx: true });
+    }
+    process.exit(process.env.CCF_SETUP_EXIT ?? 0);
+  }
+
   // Load config.
   loadEnv();
   if (!existsSync(envPath())) {
