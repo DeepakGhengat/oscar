@@ -49,7 +49,7 @@ function currentEnv(): Record<string, string> {
 }
 
 /** Rewrite a single KEY=VALUE line in the .env, preserving everything else. */
-function rewriteKey(file: string, key: string, value: string): void {
+export function rewriteKey(file: string, key: string, value: string): void {
   const raw = existsSync(file) ? readFileSync(file, "utf8") : "";
   const lines = raw.split(/\r?\n/);
   let found = false;

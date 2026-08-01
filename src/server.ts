@@ -5,6 +5,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { loadConfig } from "./env.ts";
 import { routeMessageRequest } from "./proxy.ts";
+import { probeModels } from "./setup.ts";
+import { envFilePath, rewriteKey } from "./modelpicker.ts";
 
 const cfg = loadConfig();
 
@@ -75,6 +77,73 @@ const server = createServer(async (req, res) => {
       openaiBaseURL: c.openAIBaseURL,
       port: c.port,
     });
+    return;
+  }
+
+  /* ----- control endpoints for live model switching (claude-code-free --switch) -----
+   * These let the user switch the active backend model from another terminal
+   * while the claude CLI is running, without restarting the proxy. They are
+   * localhost-only (the server binds to localhost) and read/write the .env the
+   * proxy already loads per request via loadConfig(). */
+  if (path.startsWith("/_ccf/")) {
+    const c = loadConfig();
+    if (!c.useOpenAI) {
+      sendJSON(res, 400, { error: "control endpoints require USE_OPENAI_API=1" });
+      return;
+    }
+
+    // GET /_ccf/status — current model + backend.
+    if (method === "GET" && path === "/_ccf/status") {
+      sendJSON(res, 200, {
+        openaiModel: c.openAIModel,
+        openaiBaseURL: c.openAIBaseURL,
+        openaiKey: c.openAIKey ? c.openAIKey.slice(0, 4) + "..." : null,
+      });
+      return;
+    }
+
+    // GET /_ccf/models — probe the live backend /models, sorted.
+    if (method === "GET" && path === "/_ccf/models") {
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      if (c.openAIKey) headers.authorization = `Bearer ${c.openAIKey}`;
+      const models = await probeModels(c.openAIBaseURL, (url, init) =>
+        fetch(url, { ...init, headers: { ...headers, ...((init?.headers as Record<string, string>) ?? {}) } } as RequestInit),
+      );
+      models.sort((a, b) => a.localeCompare(b));
+      sendJSON(res, 200, { backend: c.openAIBaseURL, current: c.openAIModel, models });
+      return;
+    }
+
+    // POST /_ccf/model { "model": "..." } — hot-swap OPENAI_MODEL for the
+    // running proxy (mutates process.env so loadConfig() picks it up on the
+    // next request) and persist to .env so the change survives a restart.
+    if (method === "POST" && path === "/_ccf/model") {
+      const body = await readBody(req);
+      let parsed: { model?: string };
+      try {
+        parsed = JSON.parse(body.toString("utf8")) as { model?: string };
+      } catch {
+        sendJSON(res, 400, { error: "invalid JSON body" });
+        return;
+      }
+      const model = (parsed.model ?? "").trim();
+      if (!model) {
+        sendJSON(res, 400, { error: "missing 'model' field" });
+        return;
+      }
+      process.env.OPENAI_MODEL = model;
+      try {
+        rewriteKey(envFilePath(), "OPENAI_MODEL", model);
+      } catch (err) {
+        // In-memory switch still succeeded; persistence is best-effort.
+        console.error(`[warn] could not persist OPENAI_MODEL to .env: ${err instanceof Error ? err.message : err}`);
+      }
+      console.log(`[_ccf] switched OPENAI_MODEL → ${model}`);
+      sendJSON(res, 200, { ok: true, openaiModel: model });
+      return;
+    }
+
+    sendJSON(res, 404, { error: `unknown control endpoint: ${method} ${path}` });
     return;
   }
 
