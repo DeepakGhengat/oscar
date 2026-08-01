@@ -18,17 +18,29 @@ Studio, vLLM, etc.
 
 ## Setup
 
-1. Install the Claude Code SDK (ships the `claude` CLI binary):
+Run the interactive setup wizard — it asks which LLM provider to use (OpenAI,
+DeepSeek, Ollama, LM Studio, vLLM, custom, or Anthropic passthrough), collects
+your key/model, writes a `.env`, and offers to start the proxy:
 
-   ```bash
-   bash scripts/install-sdk.sh
-   ```
+```bash
+npm run setup
+```
 
-2. Install Node deps:
+Or equivalently:
 
-   ```bash
-   npm install
-   ```
+```bash
+npx tsx src/setup.ts
+```
+
+If `.env` is missing, `bash scripts/run.sh` runs the wizard automatically before
+launching the CLI.
+
+Then install Node deps and the Claude SDK (one-time):
+
+```bash
+npm install
+bash scripts/install-sdk.sh
+```
 
 ## Configuration (environment variables)
 

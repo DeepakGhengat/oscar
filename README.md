@@ -64,11 +64,31 @@ the server uses `node:http`, and tests use `node:test`. No Bun required.
 
 ## Quick start
 
+Run the interactive setup wizard first — it asks which LLM provider to use
+(OpenAI, DeepSeek, Ollama, LM Studio, vLLM, custom, or Anthropic passthrough),
+collects your key/model, writes a `.env`, and offers to start the proxy:
+
+```bash
+npm install
+npm run setup
+```
+
+Then bring the installed Claude Code SDK into this folder (one-time) and run:
+
 ```bash
 # 1. (once) bring the installed Claude Code SDK into this folder
 bash scripts/install-sdk.sh
 
 # 2. run the proxy + claude together
+bash scripts/run.sh
+```
+
+If `.env` is already present, `run.sh` skips the wizard and launches straight
+into the proxy + CLI. Pass `--setup` to force the wizard: `bash scripts/run.sh --setup`.
+
+Prefer to configure by hand? Set the env vars directly instead:
+
+```bash
 USE_OPENAI_API=1 \
 OPENAI_API_KEY=sk-... \
 OPENAI_MODEL=deepseek-chat \
