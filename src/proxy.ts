@@ -10,8 +10,52 @@ import type {
   ProxyConfig,
 } from "./types.ts";
 import { loadConfig } from "./env.ts";
+import { probeModels } from "./setup.ts";
 
 const ANTHROPIC_VERSION = "2023-06-01";
+
+/* --------- backend model set (for respecting body.model overrides) --------
+ * claude's /model menu maps tier names → backend models via `modelOverrides`
+ * in settings.json. When the user picks a tier, claude sends the mapped
+ * backend model id in the request body's `model` field. We want to honor
+ * that — but only when it's a real backend model (so the default flow, where
+ * the body carries an Anthropic id, still falls back to OPENAI_MODEL).
+ *
+ * The set is probed lazily and cached for 60s so /_ccf/model hot-swaps and
+ * freshly-deployed models are picked up without a restart. */
+let backendModelsCache: Set<string> | null = null;
+let backendModelsAt = 0;
+const BACKEND_MODELS_TTL_MS = 60_000;
+
+async function getBackendModels(cfg: ProxyConfig): Promise<Set<string>> {
+  if (backendModelsCache && Date.now() - backendModelsAt < BACKEND_MODELS_TTL_MS) {
+    return backendModelsCache;
+  }
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (cfg.openAIKey) headers.authorization = `Bearer ${cfg.openAIKey}`;
+  const ids = await probeModels(cfg.openAIBaseURL, (url, init) =>
+    fetch(url, {
+      ...init,
+      headers: { ...headers, ...((init?.headers as Record<string, string>) ?? {}) },
+    } as RequestInit),
+  );
+  backendModelsCache = new Set(ids);
+  backendModelsAt = Date.now();
+  return backendModelsCache;
+}
+
+/** Resolve the upstream model: prefer body.model when it's a known backend
+ * model (so /model overrides take effect), else fall back to OPENAI_MODEL. */
+async function resolveUpstreamModel(
+  cfg: ProxyConfig,
+  bodyModel: string | undefined,
+): Promise<string | null> {
+  if (bodyModel) {
+    const backend = await getBackendModels(cfg);
+    if (backend.has(bodyModel)) return bodyModel;
+  }
+  return cfg.openAIModel ?? bodyModel ?? null;
+}
 
 function authHeaders(cfg: ProxyConfig, target: "openai" | "anthropic"): Record<string, string> {
   if (target === "openai") {
@@ -30,7 +74,8 @@ async function callOpenAI(
   cfg: ProxyConfig,
   body: AnthropicMessagesRequest,
 ): Promise<Response> {
-  const openaiReq = buildOpenAIRequest(body, cfg.openAIModel ?? body.model);
+  const upstreamModel = await resolveUpstreamModel(cfg, body.model);
+  const openaiReq = buildOpenAIRequest(body, upstreamModel ?? body.model);
   const url = `${cfg.openAIBaseURL}/chat/completions`;
 
   const upstream = await fetch(url, {
@@ -49,7 +94,7 @@ async function callOpenAI(
   }
 
   if (openaiReq.stream) {
-    return streamFromOpenAI(upstream, cfg.openAIModel ?? body.model);
+    return streamFromOpenAI(upstream, upstreamModel ?? body.model);
   }
 
   const json = (await upstream.json()) as OpenAIChatCompletionResponse;
@@ -180,12 +225,13 @@ export async function routeMessageRequest(
   const parsed = body ? (JSON.parse(typeof body === "string" ? body : new TextDecoder().decode(body)) as AnthropicMessagesRequest) : undefined;
 
   if (cfg.useOpenAI && parsed) {
+    const upstreamModel = await resolveUpstreamModel(cfg, parsed.model);
     const response = await callOpenAI(cfg, parsed);
     return {
       response,
       route: "openai",
       incomingModel: parsed.model,
-      upstreamModel: cfg.openAIModel ?? parsed.model,
+      upstreamModel: upstreamModel ?? parsed.model,
     };
   }
   // Passthrough: keep native Anthropic behaviour intact.
