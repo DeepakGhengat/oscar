@@ -1,0 +1,20 @@
+# Node
+node_modules/
+package-lock.json
+
+# Vendored SDK (fetched by scripts/install-sdk.sh, not committed)
+sdk/
+!sdk/sdk-tools.d.ts
+!sdk/claude-code.package.json
+
+# Build / TS
+*.tsbuildinfo
+dist/
+build/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/

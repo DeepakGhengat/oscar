@@ -1,0 +1,6 @@
+{
+  "name": "claude-code-free",
+  "version": "0.1.0",
+  "description": "Local proxy that routes Anthropic Claude Code requests to any OpenAI-compatible backend (OpenAI, DeepSeek, Ollama, LM Studio, vLLM).",
+  "author": { "name": "claude-code-free" }
+}

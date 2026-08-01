@@ -1,0 +1,17 @@
+{
+  "name": "claude-code-free",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local proxy that routes Anthropic Claude Code requests to any OpenAI-compatible backend.",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "dev": "node --watch --import tsx src/server.ts",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4.23.1",
+    "typescript": "^5"
+  }
+}

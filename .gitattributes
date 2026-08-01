@@ -1,0 +1,13 @@
+# Default to LF line endings; let Git auto-convert for text on checkout.
+* text=auto eol=lf
+
+# Shell scripts must stay LF.
+*.sh text eol=lf
+
+# Windows-specific.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Vendored SDK binary — never touch it.
+sdk/bin/* binary
