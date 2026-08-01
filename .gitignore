@@ -2,6 +2,9 @@
 node_modules/
 package-lock.json
 
+# Local config written by the setup wizard
+.env
+
 # Vendored SDK (fetched by scripts/install-sdk.sh, not committed)
 sdk/
 !sdk/sdk-tools.d.ts
