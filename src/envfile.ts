@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 const loaded = new Set<string>();
 
@@ -26,9 +26,15 @@ export function parseEnvFile(content: string): Record<string, string> {
 
 /** Load .env into process.env for keys not already set. Runs once per path.
  * If no path is given, prefers CLAUDE_CODE_FREE_CONFIG (the global-install
- * config dir), then falls back to ./env in the cwd. */
+ * config dir), then falls back to ./env in the cwd.
+ *
+ * `path` (and CLAUDE_CODE_FREE_CONFIG) may be either the .env file itself or
+ * the directory that contains it — a directory is joined with ".env". */
 export function loadEnvFile(path?: string): void {
-  const file = resolve(path ?? process.env.CLAUDE_CODE_FREE_CONFIG ?? ".env");
+  const candidate = resolve(path ?? process.env.CLAUDE_CODE_FREE_CONFIG ?? ".env");
+  const file = existsSync(candidate) && statSync(candidate).isDirectory()
+    ? join(candidate, ".env")
+    : candidate;
   if (loaded.has(file)) return;
   loaded.add(file);
   if (!existsSync(file)) return;
