@@ -6,6 +6,7 @@
   "scripts": {
     "start": "tsx src/server.ts",
     "dev": "node --watch --import tsx src/server.ts",
+    "claude": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run.ps1",
     "setup": "tsx src/setup.ts",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
