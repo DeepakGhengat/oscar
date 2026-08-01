@@ -1,4 +1,7 @@
+import { loadEnvFile } from "./envfile.ts";
 import type { ProxyConfig } from "./types.ts";
+
+loadEnvFile();
 
 const TRUTHY = new Set(["1", "true", "yes", "on"]);
 
