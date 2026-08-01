@@ -1,13 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PROVIDER_PRESETS, formatEnv, probeModels } from "../src/setup.ts";
+import type { ProviderId, ProviderPreset } from "../src/setup.ts";
 
 test("PROVIDER_PRESETS: 7 presets with the expected ids and base URLs", () => {
   const ids = PROVIDER_PRESETS.map((p) => p.id);
   assert.deepEqual(ids, [
     "openai", "deepseek", "ollama", "lmstudio", "vllm", "custom", "passthrough",
   ]);
-  const byId = Object.fromEntries(PROVIDER_PRESETS.map((p) => [p.id, p]));
+  const byId = Object.fromEntries(PROVIDER_PRESETS.map((p) => [p.id, p])) as Record<ProviderId, ProviderPreset>;
   assert.equal(byId.openai.baseURL, "https://api.openai.com/v1");
   assert.equal(byId.openai.defaultModel, "gpt-4o-mini");
   assert.equal(byId.deepseek.baseURL, "https://api.deepseek.com/v1");
