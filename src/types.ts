@@ -116,6 +116,9 @@ export interface OpenAIChoiceMessage {
   role: "assistant";
   content: string | null;
   tool_calls?: OpenAIToolCall[];
+  /** Reasoning-model chain-of-thought (e.g. glm-5.2, DeepSeek-R1, o1-style). */
+  reasoning?: string;
+  reasoning_content?: string;
 }
 
 export interface OpenAIChoice {
@@ -141,6 +144,9 @@ export interface OpenAIDelta {
     id?: string;
     function?: { name?: string; arguments?: string };
   }>;
+  /** Reasoning-model chain-of-thought streamed fragments. */
+  reasoning?: string;
+  reasoning_content?: string;
 }
 
 export interface OpenAIStreamChunk {

@@ -45,6 +45,7 @@ export class StreamTranslator {
   private stopReasonVal: string | null = null;
   private outputTokens = 0;
   private started = false;
+  private sawContent = false; // true once any real content delta arrives
 
   constructor(model: string) {
     this.model = model;
@@ -80,6 +81,7 @@ export class StreamTranslator {
 
     // ---- text content ----
     if (delta.content) {
+      this.sawContent = true;
       if (this.currentBlockKind !== "text") {
         // close any open tool block first
         if (this.currentBlockKind === "tool_use") {
@@ -97,6 +99,32 @@ export class StreamTranslator {
         type: "content_block_delta",
         index: this.blockIndex,
         delta: { type: "text_delta", text: delta.content },
+      });
+    }
+
+    // ---- reasoning (chain-of-thought) ----
+    // Reasoning models stream CoT via `delta.reasoning` /
+    // `delta.reasoning_content`. Only surface it as a text block when no
+    // real content has arrived (otherwise drop CoT to avoid clutter). This
+    // prevents blank replies when the token budget is consumed by reasoning.
+    const reasoningDelta = delta.reasoning ?? delta.reasoning_content;
+    if (reasoningDelta && !this.sawContent) {
+      if (this.currentBlockKind !== "text") {
+        if (this.currentBlockKind === "tool_use") {
+          events.push({ type: "content_block_stop", index: this.blockIndex });
+        }
+        this.blockIndex += 1;
+        this.currentBlockKind = "text";
+        events.push({
+          type: "content_block_start",
+          index: this.blockIndex,
+          content_block: { type: "text", text: "" },
+        });
+      }
+      events.push({
+        type: "content_block_delta",
+        index: this.blockIndex,
+        delta: { type: "text_delta", text: reasoningDelta },
       });
     }
 

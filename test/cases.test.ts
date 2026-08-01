@@ -196,6 +196,41 @@ test("translateOpenAIResponse: tool_calls → tool_use + stop_reason tool_use", 
   });
 });
 
+test("translateOpenAIResponse: empty content + reasoning → text block from reasoning", () => {
+  const res: OpenAIChatCompletionResponse = {
+    id: "c1",
+    model: "glm-5.2",
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content: null, reasoning: "1. Analyze the greeting.\n2. Respond." },
+        finish_reason: "stop",
+      },
+    ],
+    usage: { prompt_tokens: 5, completion_tokens: 8, total_tokens: 13 },
+  };
+  const out = translateOpenAIResponse(res, "claude-3-5-sonnet");
+  assert.deepEqual(out.content, [{ type: "text", text: "1. Analyze the greeting.\n2. Respond." }]);
+  assert.strictEqual(out.stop_reason, "end_turn");
+});
+
+test("translateOpenAIResponse: content present drops reasoning (no CoT clutter)", () => {
+  const res: OpenAIChatCompletionResponse = {
+    id: "c1",
+    model: "glm-5.2",
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content: "Hello there!", reasoning: "1. think..." },
+        finish_reason: "stop",
+      },
+    ],
+    usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
+  };
+  const out = translateOpenAIResponse(res, "claude-3-5-sonnet");
+  assert.deepEqual(out.content, [{ type: "text", text: "Hello there!" }]);
+});
+
 test("safeParseToolInput handles bad JSON gracefully", () => {
   assert.deepEqual(safeParseToolInput(""), {});
   assert.deepEqual(safeParseToolInput('{"a":1}'), { a: 1 });
@@ -228,6 +263,26 @@ test("stream: text-only emits start/delta/stop sequence", () => {
     "message_delta",
     "message_stop",
   ]);
+});
+
+test("stream: reasoning-only deltas surface as text block when content absent", () => {
+  const chunks: OpenAIStreamChunk[] = [
+    { id: "a", choices: [{ index: 0, delta: { reasoning: "1. think" }, finish_reason: null }] },
+    { id: "a", choices: [{ index: 0, delta: { reasoning: " 2. answer" }, finish_reason: null }] },
+    { id: "a", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
+  ];
+  const t = new StreamTranslator("m");
+  const text: string[] = [];
+  for (const c of chunks) {
+    for (const e of t.feed(c)) {
+      if (e.type === "content_block_delta") {
+        const d = e.delta as { type?: string; text?: string };
+        if (d.type === "text_delta" && typeof d.text === "string") text.push(d.text);
+      }
+    }
+  }
+  for (const e of t.flush()) void e;
+  assert.strictEqual(text.join(""), "1. think 2. answer");
 });
 
 test("stream: tool_calls accumulate input_json_delta and finish with tool_use", () => {

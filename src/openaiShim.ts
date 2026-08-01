@@ -179,6 +179,17 @@ export function translateOpenAIResponse(
   const content: AnthropicContentBlock[] = [];
   if (choice.message.content) {
     content.push({ type: "text", text: choice.message.content });
+  } else {
+    // Reasoning models (glm-5.2:cloud, DeepSeek-R1, o1-style) place the
+    // chain-of-thought in `message.reasoning` / `message.reasoning_content`
+    // and may leave `content` empty when the token budget is consumed by
+    // reasoning. Surface the reasoning as the reply so the caller never
+    // sees a blank message. When real content is present, drop reasoning
+    // (don't clutter the consumer's context with CoT).
+    const reasoning = choice.message.reasoning ?? choice.message.reasoning_content;
+    if (reasoning) {
+      content.push({ type: "text", text: reasoning });
+    }
   }
   if (choice.message.tool_calls) {
     for (const tc of choice.message.tool_calls) {
