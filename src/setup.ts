@@ -48,3 +48,24 @@ export function formatEnv(cfg: SetupConfig): string {
   }
   return lines.join("\n") + "\n";
 }
+
+/** Probe an OpenAI-compatible /models endpoint. Returns [] on any failure/timeout. */
+export async function probeModels(
+  baseURL: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string[]> {
+  try {
+    const res = await fetchImpl(`${baseURL.replace(/\/$/, "")}/models`, {
+      signal: AbortSignal.timeout(2000),
+      headers: { "content-type": "application/json" },
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as { data?: Array<{ id?: string }> };
+    if (!Array.isArray(json.data)) return [];
+    const ids: string[] = [];
+    for (const m of json.data) if (typeof m?.id === "string") ids.push(m.id);
+    return ids;
+  } catch {
+    return [];
+  }
+}

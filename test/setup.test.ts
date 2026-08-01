@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PROVIDER_PRESETS, formatEnv } from "../src/setup.ts";
+import { PROVIDER_PRESETS, formatEnv, probeModels } from "../src/setup.ts";
 
 test("PROVIDER_PRESETS: 7 presets with the expected ids and base URLs", () => {
   const ids = PROVIDER_PRESETS.map((p) => p.id);
@@ -48,4 +48,32 @@ test("formatEnv: passthrough config writes only anthropic key + port", () => {
   assert.match(out, /PROXY_PORT=8787/);
   assert.doesNotMatch(out, /USE_OPENAI_API=1/);
   assert.doesNotMatch(out, /OPENAI_API_KEY/);
+});
+
+test("probeModels: returns parsed model ids on happy path", async () => {
+  const fakeFetch = (async (url: string | URL | Request, _init?: RequestInit) => {
+    return new Response(JSON.stringify({ data: [{ id: "llama3" }, { id: "qwen2" }] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+  const ids = await probeModels("http://localhost:11434/v1", fakeFetch);
+  assert.deepEqual(ids, ["llama3", "qwen2"]);
+});
+
+test("probeModels: returns [] on HTTP error status", async () => {
+  const fakeFetch = (async () => new Response("nope", { status: 500 })) as typeof fetch;
+  const ids = await probeModels("http://localhost:11434/v1", fakeFetch);
+  assert.deepEqual(ids, []);
+});
+
+test("probeModels: returns [] on malformed JSON", async () => {
+  const fakeFetch = (async () => new Response("not json", { status: 200 })) as typeof fetch;
+  const ids = await probeModels("http://localhost:11434/v1", fakeFetch);
+  assert.deepEqual(ids, []);
+});
+
+test("probeModels: returns [] when fetch throws", async () => {
+  const fakeFetch = (async () => { throw new Error("ECONNREFUSED"); }) as typeof fetch;
+  const ids = await probeModels("http://localhost:11434/v1", fakeFetch);
+  assert.deepEqual(ids, []);
 });
