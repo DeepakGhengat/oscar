@@ -167,7 +167,15 @@ export async function main(): Promise<void> {
 
   const write = (await ask(rl, "Write .env?", "Y")).toLowerCase();
   if (write.startsWith("y") || write === "") {
-    const envPath = resolve(".env");
+    // Global install: config lives at $CLAUDE_CODE_FREE_CONFIG (set by the
+    // bin launcher, typically ~/.claude-code-free/.env). Local dev: write to
+    // the project root .env.
+    const dir = process.env.CLAUDE_CODE_FREE_CONFIG;
+    const envPath = dir ? resolve(dir, ".env") : resolve(".env");
+    if (dir) {
+      const { mkdirSync } = await import("node:fs");
+      mkdirSync(dir, { recursive: true });
+    }
     writeFileSync(envPath, formatEnv(cfg));
     console.log(`  wrote ${envPath}`);
   } else {
@@ -189,7 +197,8 @@ export async function main(): Promise<void> {
 }
 
 // Run only when invoked directly.
-const isMain = process.argv[1] && resolve(process.argv[1]) === resolve("src/setup.ts");
+const invokedAs = process.argv[1] ?? "";
+const isMain = invokedAs.endsWith("setup.ts") || invokedAs.endsWith("setup.mjs");
 if (isMain) {
   main().catch((err) => {
     console.error(err);

@@ -24,9 +24,11 @@ export function parseEnvFile(content: string): Record<string, string> {
   return out;
 }
 
-/** Load .env into process.env for keys not already set. Runs once per path. */
+/** Load .env into process.env for keys not already set. Runs once per path.
+ * If no path is given, prefers CLAUDE_CODE_FREE_CONFIG (the global-install
+ * config dir), then falls back to ./env in the cwd. */
 export function loadEnvFile(path?: string): void {
-  const file = resolve(path ?? ".env");
+  const file = resolve(path ?? process.env.CLAUDE_CODE_FREE_CONFIG ?? ".env");
   if (loaded.has(file)) return;
   loaded.add(file);
   if (!existsSync(file)) return;
