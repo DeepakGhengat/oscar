@@ -150,6 +150,24 @@ async function main() {
     process.exit(process.env.CCF_SETUP_EXIT ?? 0);
   }
 
+  // --switch: talk to a *running* proxy's /_ccf/ control endpoints and
+  // hot-swap the backend model live, without restarting claude. Use from a
+  // second terminal while claude is running in the first.
+  if (args.includes("--switch")) {
+    const dir = configDir();
+    if (process.env.CLAUDE_CODE_FREE_CONFIG === undefined) {
+      process.env.CLAUDE_CODE_FREE_CONFIG = dir;
+    }
+    const tsx = findTsx();
+    const switchTs = join(PKG_ROOT, "src", "switchpick.ts");
+    if (tsx) {
+      await runNode([tsx, switchTs], { stdio: "inherit" });
+    } else {
+      await runNode(["tsx", switchTs], { stdio: "inherit", useNpx: true });
+    }
+    process.exit(process.env.CCF_SETUP_EXIT ?? 0);
+  }
+
   // Load config.
   loadEnv();
   if (!existsSync(envPath())) {
@@ -221,7 +239,7 @@ async function main() {
   }
 
   // 4. Launch claude, forwarding args (minus any --setup we already handled).
-  const claudeArgs = args.filter((a) => a !== "--setup");
+  const claudeArgs = args.filter((a) => a !== "--setup" && a !== "--switch");
   const claudeBin = findClaudeBin();
   console.log(`Launching: ${claudeBin}`);
   const claude = spawn(claudeBin, claudeArgs, { stdio: "inherit", env: process.env });
