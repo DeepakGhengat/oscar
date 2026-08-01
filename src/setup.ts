@@ -72,45 +72,47 @@ export async function probeModels(
 
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+import { banner, box, c, createQuestion, select, type SelectOption } from "./ui.ts";
+
+/** Close readline without triggering the libuv assertion on piped stdin (Windows). */
+function closeRl(rl: { close: () => void; pause?: () => void }): void {
+  if (!process.stdin.isTTY) {
+    try { process.stdin.unref(); } catch {}
+    return;
+  }
+  try { rl.close(); } catch {}
+}
 
 async function ask(rl: ReturnType<typeof createInterface>, q: string, fallback?: string): Promise<string> {
-  const prompt = fallback !== undefined ? `${q} [${fallback}]: ` : `${q}: `;
-  const answer = (await rl.question(prompt)).trim();
+  const askFn = createQuestion(rl);
+  const prompt = fallback !== undefined
+    ? `${c.bold}${q}${c.reset} [${c.gray}${fallback}${c.reset}]: `
+    : `${c.bold}${q}${c.reset}: `;
+  const answer = (await askFn(prompt)).trim();
   return answer.length ? answer : (fallback ?? "");
 }
 
 async function askRequired(rl: ReturnType<typeof createInterface>, q: string): Promise<string> {
+  const askFn = createQuestion(rl);
   for (;;) {
-    const a = (await rl.question(`${q}: `)).trim();
+    const a = (await askFn(`${c.bold}${q}${c.reset}: `)).trim();
     if (a) return a;
-    console.log("  (required, try again)");
+    console.log(`${c.red}  (required, try again)${c.reset}`);
   }
-}
-
-function pickNumber(rl: ReturnType<typeof createInterface>, options: string[], prompt: string): Promise<number> {
-  return (async () => {
-    for (;;) {
-      options.forEach((o, i) => console.log(`  ${i + 1}) ${o}`));
-      const a = (await rl.question(`${prompt}: `)).trim();
-      const n = Number(a);
-      if (Number.isInteger(n) && n >= 1 && n <= options.length) return n - 1;
-      console.log("  (invalid choice, try again)");
-    }
-  })();
 }
 
 export async function main(): Promise<void> {
   const rl = createInterface({ input, output });
-  console.log("\n=== claude-code-free setup ===\n");
+  console.log(banner("claude-code-free setup", "Pick a backend, probe its models, write .env"));
 
-  const idx = await pickNumber(
-    rl,
-    PROVIDER_PRESETS.map((p) => p.label),
-    "Choose an LLM provider",
-  );
+  const providerOptions: SelectOption[] = PROVIDER_PRESETS.map((p) => ({
+    label: p.label,
+    description: p.kind === "local" ? "local" : p.kind,
+  }));
+  const idx = await select(rl, providerOptions, "Choose an LLM provider");
   const preset = PROVIDER_PRESETS[idx]!;
 
   const port = Number(await ask(rl, "Proxy port", "8787")) || 8787;
@@ -129,41 +131,39 @@ export async function main(): Promise<void> {
       ? await ask(rl, "Base URL", preset.baseURL)
       : await askRequired(rl, "Base URL (OpenAI-compatible)");
 
-    // model selection
-    if (preset.kind === "local") {
-      const models = await probeModels(openAIBaseURL);
-      if (models.length) {
-        const choice = await pickNumber(rl, [...models, "Type manually"], "Pick a model");
-        openAIModel = choice < models.length ? models[choice]! : await askRequired(rl, "Model name");
-      } else {
-        console.log(`  (could not reach ${openAIBaseURL}/models — enter the model name manually)`);
-        openAIModel = preset.defaultModel
-          ? await ask(rl, "Model name", preset.defaultModel)
-          : await askRequired(rl, "Model name");
-      }
-    } else if (preset.defaultModel) {
-      openAIModel = await ask(rl, "Model", preset.defaultModel);
-    } else {
-      openAIModel = await askRequired(rl, "Model name");
-    }
-
+    // Collect the API key first so we can probe authenticated /models endpoints
+    // (Ollama Cloud, OpenAI, DeepSeek all require it to list models).
     openAIKey = preset.keyHint
       ? (await ask(rl, "API key (local servers usually ignore this)", preset.keyHint) || preset.keyHint)
       : await askRequired(rl, "API key");
+
+    // Model selection — probe the live backend with the key, for any provider.
+    console.log(`${c.dim}Probing ${openAIBaseURL}/models ...${c.reset}`);
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (openAIKey) headers.authorization = `Bearer ${openAIKey}`;
+    const models = await probeModels(openAIBaseURL, (url, init) =>
+      fetch(url, { ...init, headers: { ...headers, ...((init?.headers as Record<string, string>) ?? {}) } } as RequestInit),
+    );
+    models.sort((a, b) => a.localeCompare(b));
+    if (models.length) {
+      const modelOpts: SelectOption[] = models.map((m) => ({ label: m }));
+      modelOpts.push({ label: `${c.gray}Type manually${c.reset}` });
+      const choice = await select(rl, modelOpts, "Pick a model");
+      openAIModel = choice < models.length ? models[choice]! : await askRequired(rl, "Model name");
+    } else {
+      console.log(`${c.yellow}  (could not reach ${openAIBaseURL}/models — enter the model name manually)${c.reset}`);
+      openAIModel = preset.defaultModel
+        ? await ask(rl, "Model name", preset.defaultModel)
+        : await askRequired(rl, "Model name");
+    }
   }
 
   const cfg: SetupConfig = { useOpenAI, openAIKey, openAIModel, openAIBaseURL, anthropicKey, port };
 
-  console.log("\n--- summary ---");
-  console.log(`  provider: ${preset.label}`);
-  if (useOpenAI) {
-    console.log(`  base URL: ${openAIBaseURL}`);
-    console.log(`  model:    ${openAIModel}`);
-    console.log(`  key:      ${openAIKey ? openAIKey.slice(0, 4) + "..." : "(none)"}`);
-  } else {
-    console.log(`  anthropic key: ${anthropicKey ? anthropicKey.slice(0, 4) + "..." : "(none)"}`);
-  }
-  console.log(`  port: ${port}\n`);
+  const summary = useOpenAI
+    ? `provider:  ${preset.label}\nbase URL:  ${openAIBaseURL}\nmodel:     ${openAIModel}\nkey:       ${openAIKey ? openAIKey.slice(0, 4) + "..." : "(none)"}\nport:      ${port}`
+    : `provider:      ${preset.label}\nanthropic key: ${anthropicKey ? anthropicKey.slice(0, 4) + "..." : "(none)"}\nport:          ${port}`;
+  console.log(`\n${box(summary)}\n`);
 
   const write = (await ask(rl, "Write .env?", "Y")).toLowerCase();
   if (write.startsWith("y") || write === "") {
@@ -172,27 +172,23 @@ export async function main(): Promise<void> {
     // the project root .env.
     const dir = process.env.CLAUDE_CODE_FREE_CONFIG;
     const envPath = dir ? resolve(dir, ".env") : resolve(".env");
-    if (dir) {
-      const { mkdirSync } = await import("node:fs");
-      mkdirSync(dir, { recursive: true });
-    }
+    if (dir) mkdirSync(dir, { recursive: true });
     writeFileSync(envPath, formatEnv(cfg));
-    console.log(`  wrote ${envPath}`);
+    console.log(`${c.green}✓${c.reset} wrote ${envPath}`);
   } else {
-    console.log("  skipped writing .env — exiting without changes.");
-    rl.close();
+    console.log(`${c.gray}skipped writing .env — exiting without changes.${c.reset}`);
+    closeRl(rl);
     return;
   }
 
-  const start = (await ask(rl, "Start the proxy now?", "Y")).toLowerCase();
-  rl.close();
+  const start = (await ask(rl, "Start claude-code-free now?", "Y")).toLowerCase();
+  closeRl(rl);
   if (start.startsWith("y") || start === "") {
-    const child = spawn(process.platform === "win32" ? "npx.cmd" : "npx", ["tsx", "src/server.ts"], {
-      stdio: "inherit",
-    });
-    child.on("close", (code) => process.exit(code ?? 0));
+    console.log(`\n${c.dim}Run again anytime with: claude-code-free${c.reset}`);
+    console.log(`${c.dim}Switch models with:      claude-code-free --model${c.reset}`);
   } else {
-    console.log("\nDone. Run with: npx tsx src/server.ts  (or bash scripts/run.sh)");
+    console.log(`\n${c.dim}Done. Run with: claude-code-free${c.reset}`);
+    console.log(`${c.dim}Switch models with: claude-code-free --model${c.reset}`);
   }
 }
 
@@ -202,6 +198,6 @@ const isMain = invokedAs.endsWith("setup.ts") || invokedAs.endsWith("setup.mjs")
 if (isMain) {
   main().catch((err) => {
     console.error(err);
-    process.exit(1);
+    process.exitCode = 1;
   });
 }
