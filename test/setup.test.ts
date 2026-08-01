@@ -1,0 +1,51 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { PROVIDER_PRESETS, formatEnv } from "../src/setup.ts";
+
+test("PROVIDER_PRESETS: 7 presets with the expected ids and base URLs", () => {
+  const ids = PROVIDER_PRESETS.map((p) => p.id);
+  assert.deepEqual(ids, [
+    "openai", "deepseek", "ollama", "lmstudio", "vllm", "custom", "passthrough",
+  ]);
+  const byId = Object.fromEntries(PROVIDER_PRESETS.map((p) => [p.id, p]));
+  assert.equal(byId.openai.baseURL, "https://api.openai.com/v1");
+  assert.equal(byId.openai.defaultModel, "gpt-4o-mini");
+  assert.equal(byId.deepseek.baseURL, "https://api.deepseek.com/v1");
+  assert.equal(byId.ollama.baseURL, "http://localhost:11434/v1");
+  assert.equal(byId.lmstudio.baseURL, "http://localhost:1234/v1");
+  assert.equal(byId.vllm.baseURL, "http://localhost:8000/v1");
+  assert.equal(byId.custom.baseURL, null);
+  assert.equal(byId.passthrough.kind, "passthrough");
+});
+
+test("formatEnv: cloud config writes OpenAI vars + port", () => {
+  const out = formatEnv({
+    useOpenAI: true,
+    openAIKey: "sk-test",
+    openAIModel: "gpt-4o-mini",
+    openAIBaseURL: "https://api.openai.com/v1",
+    anthropicKey: null,
+    port: 8787,
+  });
+  assert.match(out, /USE_OPENAI_API=1/);
+  assert.match(out, /OPENAI_API_KEY=sk-test/);
+  assert.match(out, /OPENAI_MODEL=gpt-4o-mini/);
+  assert.match(out, /OPENAI_BASE_URL=https:\/\/api\.openai\.com\/v1/);
+  assert.match(out, /PROXY_PORT=8787/);
+  assert.doesNotMatch(out, /ANTHROPIC_API_KEY/);
+});
+
+test("formatEnv: passthrough config writes only anthropic key + port", () => {
+  const out = formatEnv({
+    useOpenAI: false,
+    openAIKey: null,
+    openAIModel: null,
+    openAIBaseURL: null,
+    anthropicKey: "sk-ant",
+    port: 8787,
+  });
+  assert.match(out, /ANTHROPIC_API_KEY=sk-ant/);
+  assert.match(out, /PROXY_PORT=8787/);
+  assert.doesNotMatch(out, /USE_OPENAI_API=1/);
+  assert.doesNotMatch(out, /OPENAI_API_KEY/);
+});
