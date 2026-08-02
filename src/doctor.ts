@@ -1,4 +1,4 @@
-// `claude-code-free --doctor` — check the whole chain before you need it.
+// `oscar --doctor` — check the whole chain before you need it.
 //
 // Exists because the failure this catches is nearly undiagnosable from the
 // symptom: a placeholder API key passes the wizard's /models probe (listing is
@@ -36,11 +36,11 @@ function readEnvFile(file: string): Record<string, string> {
 /** Run every check. Returns true when the config should actually work. */
 export async function runDoctor(): Promise<boolean> {
   const file = envFilePath();
-  console.log(`${c.bold}claude-code-free doctor${c.reset}`);
+  console.log(`${c.bold}O.S.C.A.R. doctor${c.reset}`);
   console.log(`${c.dim}config: ${file}${c.reset}\n`);
 
   if (!existsSync(file)) {
-    console.log(`${FAIL} no config found — run ${c.bold}claude-code-free --setup${c.reset}`);
+    console.log(`${FAIL} no config found — run ${c.bold}oscar --setup${c.reset}`);
     return false;
   }
   console.log(`${PASS} config file present`);
@@ -134,7 +134,7 @@ export async function runDoctor(): Promise<boolean> {
       if (result.kind === "auth") {
         console.log(`  ${c.dim}Set a real key for ${p.baseURL} in ${providers.length > 1 ? "providers.json" : file}.${c.reset}`);
       } else if (result.kind === "model") {
-        console.log(`  ${c.dim}Pick a served model with: claude-code-free --model${c.reset}`);
+        console.log(`  ${c.dim}Pick a served model with: oscar --model${c.reset}`);
       }
       ok = false;
     }

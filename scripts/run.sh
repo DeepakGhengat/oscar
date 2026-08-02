@@ -62,7 +62,7 @@ export ANTHROPIC_BASE_URL="http://localhost:$PORT"
 # if you want passthrough to hit a non-default Anthropic endpoint).
 export ANTHROPIC_REAL_BASE_URL="https://api.anthropic.com"
 if [ "${USE_OPENAI_API:-0}" = "1" ]; then
-  export ANTHROPIC_API_KEY="claude-code-free-dummy-key"
+  export ANTHROPIC_API_KEY="oscar-dummy-key"
   # Make backend models appear in /model: claude only fetches
   # $ANTHROPIC_BASE_URL/v1/models for the picker when this is set.
   export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1
@@ -70,7 +70,7 @@ if [ "${USE_OPENAI_API:-0}" = "1" ]; then
   # token in the real ~/.claude makes it ignore our dummy key and show a login
   # page. Point it at a throwaway profile — same location the Node launcher
   # uses, so both entry points share one clean config.
-  CLEAN_CONFIG="${HOME}/.claude-code-free/claude-config"
+  CLEAN_CONFIG="${HOME}/.oscar/claude-config"
   mkdir -p "$CLEAN_CONFIG"
   export CLAUDE_CONFIG_DIR="$CLEAN_CONFIG"
 fi

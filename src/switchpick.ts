@@ -1,11 +1,11 @@
-// `claude-code-free --switch`: talk to a *running* proxy's /_ccf/ control
+// `oscar --switch`: talk to a *running* proxy's /_oscar/ control
 // endpoints and hot-swap the backend model live, without restarting it.
 //
 // Use this from a second terminal while `claude` is running in the first.
 // The proxy must already be up (the launcher starts it). This command reads
-// the proxy port from the .env, probes /_ccf/models, shows a two-step picker
+// the proxy port from the .env, probes /_oscar/models, shows a two-step picker
 // (series -> model in series) plus "all models" and "set up" options, and
-// POSTs the choice to /_ccf/model.
+// POSTs the choice to /_oscar/model.
 //
 // Unlike `--model` (which rewrites .env and expects the proxy to be stopped),
 // `--switch` mutates the live proxy's in-memory OPENAI_MODEL AND persists to
@@ -27,7 +27,7 @@ function closeRl(rl: { close: () => void; pause?: () => void }): void {
 }
 
 function envFilePath(): string {
-  const dir = process.env.CLAUDE_CODE_FREE_CONFIG;
+  const dir = process.env.OSCAR_CONFIG;
   const candidate = dir ? resolve(dir) : resolve(".env");
   if (dir) return join(candidate, ".env");
   return candidate;
@@ -80,7 +80,7 @@ interface ModelsResponse {
 
 async function fetchModels(port: number): Promise<ModelsResponse | null> {
   try {
-    const res = await fetch(`http://localhost:${port}/_ccf/models`, {
+    const res = await fetch(`http://localhost:${port}/_oscar/models`, {
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
@@ -92,7 +92,7 @@ async function fetchModels(port: number): Promise<ModelsResponse | null> {
 
 async function postModel(port: number, model: string): Promise<boolean> {
   try {
-    const res = await fetch(`http://localhost:${port}/_ccf/model`, {
+    const res = await fetch(`http://localhost:${port}/_oscar/model`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ model }),
@@ -106,7 +106,7 @@ async function postModel(port: number, model: string): Promise<boolean> {
 
 async function getStatus(port: number): Promise<{ openaiModel?: string } | null> {
   try {
-    const res = await fetch(`http://localhost:${port}/_ccf/status`, {
+    const res = await fetch(`http://localhost:${port}/_oscar/status`, {
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return null;
@@ -125,18 +125,18 @@ export async function runSwitchPicker(): Promise<string | null> {
   // Confirm the proxy is actually up and answering the control endpoints.
   const status = await getStatus(port);
   if (!status) {
-    console.log(`${c.red}No proxy responding at http://localhost:${port}/_ccf/status.${c.reset}`);
-    console.log(`Start ${c.bold}claude-code-free${c.reset} first in another terminal, then run ${c.bold}claude-code-free --switch${c.reset}.`);
+    console.log(`${c.red}No proxy responding at http://localhost:${port}/_oscar/status.${c.reset}`);
+    console.log(`Start ${c.bold}oscar${c.reset} first in another terminal, then run ${c.bold}oscar --switch${c.reset}.`);
     return null;
   }
 
   console.log(`${c.dim}Current model: ${c.reset}${c.bold}${status.openaiModel ?? "(none)"}${c.reset}`);
-  console.log(`${c.dim}Probing /_ccf/models ...${c.reset}`);
+  console.log(`${c.dim}Probing /_oscar/models ...${c.reset}`);
 
   const data = await fetchModels(port);
   if (!data || !data.models.length) {
     console.log(`${c.yellow}  (proxy reachable but backend /models returned nothing)${c.reset}`);
-    console.log(`  Check ${c.bold}OPENAI_BASE_URL${c.reset} in your .env, or run ${c.bold}claude-code-free --model${c.reset} to switch offline.`);
+    console.log(`  Check ${c.bold}OPENAI_BASE_URL${c.reset} in your .env, or run ${c.bold}oscar --model${c.reset} to switch offline.`);
     return null;
   }
 
@@ -165,7 +165,7 @@ export async function runSwitchPicker(): Promise<string | null> {
   // and the proxy reloads .env lazily; safer to point them at the command).
   if (idx === seriesOptions.length - 1) {
     closeRl(rl);
-    console.log(`\nRun ${c.bold}claude-code-free --setup${c.reset} to reconfigure the backend, then restart claude.`);
+    console.log(`\nRun ${c.bold}oscar --setup${c.reset} to reconfigure the backend, then restart claude.`);
     return null;
   }
 

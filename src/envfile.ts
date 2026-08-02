@@ -25,13 +25,13 @@ export function parseEnvFile(content: string): Record<string, string> {
 }
 
 /** Load .env into process.env for keys not already set. Runs once per path.
- * If no path is given, prefers CLAUDE_CODE_FREE_CONFIG (the global-install
+ * If no path is given, prefers OSCAR_CONFIG (the global-install
  * config dir), then falls back to ./env in the cwd.
  *
- * `path` (and CLAUDE_CODE_FREE_CONFIG) may be either the .env file itself or
+ * `path` (and OSCAR_CONFIG) may be either the .env file itself or
  * the directory that contains it — a directory is joined with ".env". */
 export function loadEnvFile(path?: string): void {
-  const candidate = resolve(path ?? process.env.CLAUDE_CODE_FREE_CONFIG ?? ".env");
+  const candidate = resolve(path ?? process.env.OSCAR_CONFIG ?? ".env");
   const file = existsSync(candidate) && statSync(candidate).isDirectory()
     ? join(candidate, ".env")
     : candidate;

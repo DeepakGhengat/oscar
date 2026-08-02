@@ -1,200 +1,343 @@
-# CLAUDE_CODE_FREE
+<div align="center">
 
-Run Anthropic **Claude Code** against any **OpenAI-compatible** backend
-(OpenAI, DeepSeek, local Ollama, LM Studio, vLLM, etc.) without modifying
-Claude Code's source.
+# O.S.C.A.R.
 
-It works as a **local HTTP proxy**:
+**O**rchestrator for **S**ystem **C**oding & **A**utonomous **R**outing
+
+*Run Claude Code against any model you want — local Ollama, DeepSeek, OpenAI, LM Studio, vLLM — without patching a single line of Claude Code.*
+
+[![Node](https://img.shields.io/badge/node-%E2%89%A518-339933)](https://nodejs.org)
+[![Tests](https://img.shields.io/badge/tests-228%20passing-brightgreen)]()
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE.md)
+
+</div>
+
+---
+
+## What it is
+
+Claude Code is an excellent coding agent — the tools, the agent loop, the terminal UI, the permission model. It is also hard-wired to Anthropic's API.
+
+O.S.C.A.R. is a **local translation proxy** that sits in between. Claude Code thinks it is talking to `api.anthropic.com`; O.S.C.A.R. converts every request into OpenAI Chat Completions format and forwards it to whatever backend you actually want.
+
+You keep the entire Claude Code experience. You change only which model answers.
 
 ```
-claude (Anthropic SDK)  ──►  this proxy (Anthropic /v1/messages)
-                                   │  translates messages + tools
-                                   ▼
-                            OpenAI /v1/chat/completions  (OpenAI / DeepSeek / Ollama ...)
+  Claude Code                O.S.C.A.R. (localhost:8787)          your backend
+  ───────────                ───────────────────────────          ────────────
+  ANTHROPIC_BASE_URL ──────► GET  /v1/models      ───────────────► GET  /models
+  ANTHROPIC_API_KEY=dummy    POST /v1/messages    ──translate────► POST /chat/completions
+                             POST /v1/messages/count_tokens
+                                  (answered locally)
+                             anything else        ───────────────► api.anthropic.com
 ```
 
-You point Claude Code at the proxy with one env var (`ANTHROPIC_BASE_URL`)
-and enable OpenAI routing with `USE_OPENAI_API=1`. When the flag is off,
-the proxy transparently forwards the request to the real Anthropic API,
-so native functionality is never broken.
+## Why it exists
 
-## Layout
+Most "use Claude Code with another model" setups give you a working proxy and a broken `/model` command — you edit a config file and restart to change models.
+
+O.S.C.A.R. makes `/model` work. Every model on every configured backend shows up in Claude Code's own picker, switchable mid-session:
 
 ```
-CLAUDE_CODE_FREE/
-├── README.md                  this file
-├── package.json               scripts: start / dev / test / typecheck
-├── tsconfig.json
-├── .claude-plugin/
-│   ├── plugin.json            single plugin: claude-code-free
-│   └── marketplace.json       marketplace entry for the plugin
-├── skills/claude-code-free/SKILL.md
-├── commands/run-free.md       slash command: start proxy + claude
-├── sdk/                       vendored @anthropic-ai/claude-code (types + CLI binary)
-├── src/
-│   ├── server.ts              Node http server: listens on a port, dispatches
-│   ├── proxy.ts               routes /v1/messages → OpenAI or Anthropic passthrough
-│   ├── catalog.ts             backend model list + `claude-ccf-…` aliases for /model
-│   ├── tokens.ts              local estimator for /v1/messages/count_tokens
-│   ├── openaiShim.ts          Anthropic ↔ OpenAI translation (tools, blocks, tool_use)
-│   ├── stream.ts              OpenAI SSE stream → Anthropic event stream
-│   ├── env.ts                 reads + validates the env flags
-│   └── types.ts               shared interfaces (Anthropic + OpenAI shapes)
-├── scripts/
-│   ├── install-sdk.sh         vendors the installed @anthropic-ai/claude-code SDK here
-│   ├── run.sh                 launches the proxy + claude together
-│   └── run-tests.sh           runs the test suite
-└── test/                      178 tests, all offline
-    ├── cases.test.ts          core Anthropic ↔ OpenAI translation
-    ├── shim-edge.test.ts      translation edge cases + token estimator
-    ├── multimodal.test.ts     images, thinking blocks, max_tokens clamp
-    ├── stream-edge.test.ts    SSE state machine: block pairing, tool calls
-    ├── catalog.test.ts        /model alias table
-    ├── catalog-probe.test.ts  backend probing + memoisation (stubbed fetch)
-    ├── proxy-routing.test.ts  model resolution, upstream errors, passthrough
-    ├── server.test.ts         every HTTP route, against a spawned proxy
-    ├── env.test.ts            loadConfig: flags, URLs, validation, clamp
-    ├── envfile.test.ts        .env parsing
-    ├── env-loading.test.ts    .env precedence vs real environment
-    ├── modelpicker.test.ts    surgical .env rewrites for --model / --switch
-    ├── launcher.test.ts       version comparison + claude binary discovery
-    ├── setup.test.ts          wizard presets and /models probing
-    └── integration.test.ts    e2e through the real proxy + mock backend
+  qwen2.5:7b           (local)
+  llama3               (local)
+  glm-5.2              (cloud)
+  deepseek-v4-pro      (cloud)
+  gpt-oss:120b         (cloud)
 ```
 
-This is a **plain Node.js** project — TypeScript runs via [`tsx`](https://github.com/privatenumber/tsx),
-the server uses `node:http`, and tests use `node:test`. No Bun required.
+## Features
 
-## Environment variables
+| | |
+|---|---|
+| **Native `/model` picker** | Every backend model appears in Claude Code's own model list |
+| **Multiple backends at once** | Local Ollama *and* DeepSeek *and* OpenAI in one picker, each with its own key |
+| **Full tool-call translation** | `tool_use` / `tool_result` round-trip correctly, so the agent loop works |
+| **Streaming** | OpenAI SSE → Anthropic event stream, token by token |
+| **Vision** | Screenshots and pasted images translate to `image_url` parts |
+| **Reasoning models** | Surfaces chain-of-thought when `content` comes back empty, so no blank replies |
+| **Local token counting** | Claude Code keeps accurate context accounting |
+| **Per-model token ceilings** | Cap a small local model without touching the others |
+| **Health checks** | `oscar --doctor` proves the setup works with a real completion |
+| **Passthrough mode** | Flip one flag and every request goes to the real Anthropic API, untouched |
+
+---
+
+## Requirements
+
+- **Node.js ≥ 18** — `node --version`
+- **Claude Code** — the desktop app's bundled copy is found automatically, or `npm i -g @anthropic-ai/claude-code`
+- **A backend** — [Ollama](https://ollama.com) is the easiest; anything OpenAI-compatible works
+
+## Installation
+
+```bash
+git clone https://github.com/LORDCYBERGOD/oscar.git
+cd oscar
+```
+
+Install as a product (a real copy, not a dev link):
+
+```bash
+npm pack
+```
+
+```bash
+npm install -g ./oscar-0.1.0.tgz
+```
+
+```bash
+rm oscar-0.1.0.tgz
+```
+
+> **Why `npm pack` first?** `npm install -g .` on a local path creates a *symlink* to your working tree, not an installation. Packing first gives you a genuine copy containing only `src/`, `bin/` and `scripts/` — 25 files, ~43 kB.
+
+For development instead, link the working tree so edits take effect immediately:
+
+```bash
+npm install && npm link
+```
+
+### Windows note
+
+Everything above is identical in PowerShell except path separators (`.\oscar-0.1.0.tgz`). If PowerShell refuses to run the generated shim, its execution policy is too strict:
+
+```bash
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+## Setup
+
+```bash
+oscar --setup
+```
+
+The wizard asks for a provider, collects a key and model, then **sends one real one-token completion to prove it works** before writing `~/.oscar/.env`.
+
+That last check matters more than it sounds — see [Why listing models proves nothing](#why-listing-models-proves-nothing).
+
+Verify:
+
+```bash
+oscar --doctor
+```
+
+Run it:
+
+```bash
+oscar
+```
+
+Any extra arguments pass straight through to Claude Code:
+
+```bash
+oscar -p "explain the architecture of this repo"
+```
+
+---
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `oscar` | Start the proxy and launch Claude Code against it |
+| `oscar --setup` | Interactive wizard; writes `~/.oscar/.env` |
+| `oscar --doctor` | Check every backend, ending with a live completion. Exits non-zero on failure |
+| `oscar --model` | Pick a model and write it to `.env` |
+| `oscar --switch` | Hot-swap the model on a **running** proxy, from a second terminal |
+
+## Configuration
+
+### Single backend — `~/.oscar/.env`
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `USE_OPENAI_API` | `1` enables OpenAI routing; anything else / unset → passthrough to Anthropic | unset (passthrough) |
-| `OPENAI_API_KEY` | Bearer token for the OpenAI-compatible backend | required when flag on |
-| `OPENAI_MODEL` | Model name sent to the backend (e.g. `gpt-4o`, `deepseek-chat`, `llama3.1`) | required when flag on |
-| `OPENAI_BASE_URL` | Base URL of the backend | `https://api.openai.com/v1` |
-| `ANTHROPIC_API_KEY` | Used only in passthrough mode (forwarded to real Anthropic) | — |
-| `ANTHROPIC_BASE_URL` | **Set this to the proxy** so Claude Code talks to us | — |
+| `USE_OPENAI_API` | `1` routes to your backend; anything else passes through to Anthropic | unset |
+| `OPENAI_BASE_URL` | Backend base URL | `https://api.openai.com/v1` |
+| `OPENAI_API_KEY` | Backend key | required when routing |
+| `OPENAI_MODEL` | Default model | required when routing |
+| `OSCAR_MAX_OUTPUT_TOKENS` | Clamp on `max_tokens` — Claude Code asks for a 200k-context budget | unset (no clamp) |
 | `PROXY_PORT` | Port the proxy listens on | `8787` |
-| `CCF_MAX_OUTPUT_TOKENS` | Clamp on `max_tokens`. Claude Code asks for a 200k-context Claude model's budget; set this to your backend's real ceiling (e.g. `4096`) to stop it erroring or truncating mid-answer | unset (no clamp) |
+| `ANTHROPIC_API_KEY` | Used only in passthrough mode | — |
 
-## Switching models from `/model`
-
-Every model your backend serves shows up in Claude Code's own `/model` picker,
-so you can move between `glm-5.2:cloud`, `qwen2.5:7b`, `deepseek-v4-pro` and the
-rest mid-session without restarting anything.
-
-This works through Claude Code's **gateway model discovery**: at startup the CLI
-fetches `$ANTHROPIC_BASE_URL/v1/models?limit=1000` and folds the result into the
-picker. The launcher sets `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`; the
-other preconditions (first-party provider, a base URL that isn't
-`api.anthropic.com`) already hold when you run through the proxy.
-
-One wrinkle: Claude Code discards any discovered id that doesn't match
-`/^(claude|anthropic)/i`, which would drop every Ollama model on the floor. So
-the proxy advertises each backend model under a `claude-ccf-…` alias and puts
-the real name in `display_name` — which is what the picker actually renders. You
-see `glm-5.2:cloud`; the CLI sends back `claude-ccf-glm-5.2-cloud`; the proxy
-maps it home before calling the backend. See [`src/catalog.ts`](src/catalog.ts).
-
-Two other ways to switch, both still available:
+Example:
 
 ```bash
-claude-code-free --model    # pick a model, write it to .env, then relaunch
-claude-code-free --switch   # hot-swap a *running* proxy from a second terminal
+USE_OPENAI_API=1
+OPENAI_BASE_URL=http://localhost:11434/v1
+OPENAI_API_KEY=ollama
+OPENAI_MODEL=qwen2.5:7b
+PROXY_PORT=8787
 ```
 
-## Several backends at once
-
-Drop a `providers.json` beside your `.env` and every backend is probed
-together, appearing in one `/model` picker:
+### Multiple backends — `~/.oscar/providers.json`
 
 ```json
 {
   "providers": {
-    "local": { "baseURL": "http://localhost:11434/v1", "apiKey": "ollama" },
-    "cloud": { "baseURL": "https://ollama.com/v1", "apiKey": "sk-..." },
-    "deep":  { "baseURL": "https://api.deepseek.com/v1", "apiKey": "sk-...",
-               "maxOutputTokens": 8192,
-               "models": { "deepseek-chat": { "maxOutputTokens": 4096 } } }
+    "local": {
+      "baseURL": "http://localhost:11434/v1",
+      "apiKey": "ollama",
+      "models": { "qwen2.5:7b": { "maxOutputTokens": 4096 } }
+    },
+    "cloud": {
+      "baseURL": "https://ollama.com/v1",
+      "apiKey": "sk-..."
+    },
+    "deepseek": {
+      "baseURL": "https://api.deepseek.com/v1",
+      "apiKey": "sk-...",
+      "maxOutputTokens": 8192
+    }
   }
 }
 ```
 
-`/model` then lists `qwen2.5:7b  (local)`, `glm-5.2  (cloud)`, and so on —
-switchable mid-session, each request using that provider's own key and
-base URL. Two backends serving the same model name stay distinct.
+Every backend is probed together and appears in one picker as `model  (provider)`. Each request uses that provider's own base URL and key. Two backends serving the same model name stay individually addressable.
 
-Output-token ceilings resolve **model → provider → `CCF_MAX_OUTPUT_TOKENS`**,
-so a small local model can be capped without touching the others.
+Output-token ceilings resolve **model → provider → `OSCAR_MAX_OUTPUT_TOKENS`**.
 
-Without a `providers.json` nothing changes: the flat `OPENAI_*` config is used
-as a single provider, and aliases keep their original provider-less shape so
-anything Claude Code already cached still resolves.
+Without a `providers.json`, the flat `.env` is used as a single provider — nothing changes for existing setups.
 
-## Checking your setup
+---
 
-```bash
-claude-code-free --doctor
+## How it works
+
+### 1. Launch
+
+`oscar` performs nine steps:
+
+1. Load `~/.oscar/.env`
+2. Spawn the proxy (`src/server.ts`) as a child process
+3. Poll `/healthz` until it answers
+4. Set `ANTHROPIC_BASE_URL` to the proxy
+5. Set `ANTHROPIC_API_KEY` to a dummy value — the proxy ignores it and uses your backend key
+6. Set `CLAUDE_CONFIG_DIR` to a throwaway profile, so a stale OAuth token can't override the dummy key
+7. Set `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`
+8. Launch Claude Code
+9. Tear the proxy down on exit
+
+Meanwhile the proxy **warms its model catalog**, because the next step has a hard deadline.
+
+### 2. Model discovery — the interesting part
+
+Claude Code fetches `{ANTHROPIC_BASE_URL}/v1/models?limit=1000` **exactly once** at startup, gives up after 3 seconds, and folds the result into its `/model` picker.
+
+Then it applies this filter to the ids it got back:
+
+```js
+data.filter((m) => /^(claude|anthropic)/i.test(m.id))
 ```
 
-Verifies the config end to end and exits non-zero if anything is wrong.
+Anything else is silently discarded — which would drop every Ollama model on the floor. So O.S.C.A.R. advertises each model under an alias that survives the filter, and puts the real name in `display_name`, which is what the picker actually renders:
 
-It exists because one failure mode is nearly undiagnosable otherwise: on
-hosted backends like Ollama Cloud the `/models` listing is **public** — it
-answers `200` with no key at all, and `200` with a made-up one. A placeholder
-key such as `ollama` therefore passes every reachability check and only fails
-later, mid-conversation, as a `401` that reads like *Claude Code's* login
-expiring rather than your backend refusing `OPENAI_API_KEY`. `--doctor` sends
-a real one-token completion, which is the only check that distinguishes the
-two. The setup wizard now runs the same check before writing `.env`.
+| Sent as `id` | Shown in `/model` |
+|---|---|
+| `claude-oscar-local-qwen2.5-7b` | `qwen2.5:7b  (local)` |
+| `claude-oscar-cloud-glm-5.2` | `glm-5.2  (cloud)` |
 
-## Quick start
+Because that fetch happens *once*, a backend that is merely slow on its first request would be missing from `/model` for the entire session. That is why the catalog is warmed at boot with a 15-second budget while the request path keeps a 2.5-second one, and why a partial result is cached for 5 seconds instead of 60.
 
-Run the interactive setup wizard first — it asks which LLM provider to use
-(OpenAI, DeepSeek, Ollama, LM Studio, vLLM, custom, or Anthropic passthrough),
-collects your key/model, writes a `.env`, and offers to start the proxy:
+### 3. Each message
+
+You pick a model; Claude Code sends its alias as `body.model`. The proxy:
+
+1. Maps the alias back to a **provider + real model name**
+2. Translates Anthropic → OpenAI: system prompt, message history, tool definitions (`input_schema` → `function.parameters`), `tool_use` / `tool_result` blocks, images as data URIs
+3. Clamps `max_tokens` (model → provider → global)
+4. POSTs to **that provider's** URL with **that provider's** key
+5. Translates the response back, including SSE → Anthropic's `message_start` → `content_block_delta` → `message_stop` sequence
+
+Token counting is answered locally, because forwarding it with the dummy key would 401 and cost Claude Code its context accounting.
+
+### Architecture
+
+```
+src/
+├── server.ts        HTTP server: routes, control endpoints, catalog warm-up
+├── proxy.ts         Routing: which provider, which model, error envelopes
+├── openaiShim.ts    Anthropic ↔ OpenAI translation (pure functions)
+├── stream.ts        OpenAI SSE → Anthropic event stream
+├── catalog.ts       Model discovery + `claude-oscar-…` aliases
+├── providers.ts     Multi-backend config
+├── tokens.ts        Local token estimation
+├── preflight.ts     Live backend verification
+├── doctor.ts        `--doctor`
+├── setup.ts         Setup wizard
+├── modelpicker.ts   `--model`
+├── switchpick.ts    `--switch`
+├── env.ts           Config loading + loop guard
+└── ui.ts            Terminal UI helpers
+```
+
+---
+
+## Why listing models proves nothing
+
+This bit is worth internalising, because it produces a failure that looks like something else entirely.
+
+On several hosted backends — Ollama Cloud among them — the model listing endpoint is **public**:
+
+```
+GET  /v1/models          no auth header      → 200
+GET  /v1/models          made-up key         → 200
+POST /v1/chat/completions no auth            → 401
+```
+
+So any setup flow that validates by listing models will happily accept a placeholder key like `ollama`. The mistake surfaces much later, mid-conversation, as:
+
+```
+Failed to authenticate. API Error: 401 {"error":"Unauthorized"}
+```
+
+— which reads as *Claude Code's* login expiring, sending you to debug entirely the wrong thing.
+
+O.S.C.A.R. handles this in three places: the wizard sends a real completion before writing config, `--doctor` does the same on demand, and the proxy wraps upstream 401s so the message names your backend and the responsible provider.
+
+## Troubleshooting
+
+**`oscar: command not found`** — your npm global directory isn't on `PATH`. Find it with `npm prefix -g` and add it.
+
+**`/model` shows no backend models** — check the proxy's startup log for `models: N across M backend(s)`. If a provider is named as not answering, run `oscar --doctor`.
+
+**401 mid-conversation** — your backend rejected its key. `oscar --doctor` will name which provider and why.
+
+**Model works in `--doctor` but not in Claude Code** — the model name in `.env` may not match what the backend serves. Ollama's local naming (`glm-5.2:cloud`) differs from the cloud API's (`glm-5.2`). `--doctor` reports the closest match.
+
+**Blank replies from a reasoning model** — its token budget is being consumed by reasoning. Raise `max_tokens`, or set `OSCAR_MAX_OUTPUT_TOKENS` higher.
+
+---
+
+## Development
 
 ```bash
 npm install
-npm run setup
 ```
-
-Then bring the installed Claude Code SDK into this folder (one-time) and run:
 
 ```bash
-# 1. (once) bring the installed Claude Code SDK into this folder
-bash scripts/install-sdk.sh
-
-# 2. run the proxy + claude together
-bash scripts/run.sh
+npm test
 ```
-
-If `.env` is already present, `run.sh` skips the wizard and launches straight
-into the proxy + CLI. Pass `--setup` to force the wizard: `bash scripts/run.sh --setup`.
-
-Prefer to configure by hand? Set the env vars directly instead:
 
 ```bash
-USE_OPENAI_API=1 \
-OPENAI_API_KEY=sk-... \
-OPENAI_MODEL=deepseek-chat \
-OPENAI_BASE_URL=https://api.deepseek.com/v1 \
-bash scripts/run.sh
+npm run typecheck
 ```
 
-`run.sh` starts the proxy on `PROXY_PORT`, then launches the bundled
-`claude` CLI with `ANTHROPIC_BASE_URL=http://localhost:PROXY_PORT` so every
-request flows through the shim.
+228 tests, entirely offline. Unit tests cover translation and config; `catalog-probe` stubs `fetch`; `proxy-routing` and `integration` run in-process mock backends; `server.test.ts` spawns the real proxy and drives every route over HTTP.
 
-## Running tests
+Run just the proxy, without Claude Code:
 
 ```bash
-bash scripts/run-tests.sh
-# or directly: npx tsx --test test/
+npm start
 ```
 
-Everything runs offline. Unit tests cover the translation and config logic;
-`catalog-probe` stubs `globalThis.fetch`; `proxy-routing` and `integration`
-spin up in-process mock backends; `server.test.ts` spawns the real
-`src/server.ts` as a child process and drives every route over HTTP.
+## Compatibility
+
+Tested against Ollama (local and cloud). Anything exposing OpenAI-compatible `/models` and `/chat/completions` should work: OpenAI, DeepSeek, LM Studio, vLLM, llama.cpp, LiteLLM, OpenRouter, Together, Groq.
+
+Verified with Claude Code **2.1.219**. Model discovery relies on Claude Code's gateway-discovery behaviour, which is version-dependent — if a future release changes it, `/model` may stop listing backend models while everything else keeps working.
+
+## Licence
+
+MIT — see [LICENSE.md](LICENSE.md).
+
+O.S.C.A.R. is not affiliated with or endorsed by Anthropic. Claude Code is Anthropic's software, used here unmodified.

@@ -1,6 +1,8 @@
 {
-  "name": "claude-code-free",
+  "name": "oscar",
   "version": "0.1.0",
-  "description": "Local proxy that routes Anthropic Claude Code requests to any OpenAI-compatible backend (OpenAI, DeepSeek, Ollama, LM Studio, vLLM).",
-  "author": { "name": "claude-code-free" }
+  "description": "O.S.C.A.R. — Orchestrator for System Coding & Autonomous Routing. Runs Claude Code against any OpenAI-compatible backend (Ollama, OpenAI, DeepSeek, LM Studio, vLLM).",
+  "author": {
+    "name": "LORDCYBERGOD"
+  }
 }

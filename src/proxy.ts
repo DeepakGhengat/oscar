@@ -30,7 +30,7 @@ interface Target {
 /** Resolve the upstream target.
  *
  * When the user picks a backend model from `/model`, Claude Code sends the id
- * we advertised through gateway discovery (a `claude-ccf-…` alias) as
+ * we advertised through gateway discovery (a `claude-oscar-…` alias) as
  * `body.model`. Map that back to the real provider + model. Anything else —
  * the usual case, where the body carries an Anthropic tier id — falls back to
  * the default provider and OPENAI_MODEL. */
@@ -100,12 +100,12 @@ async function callOpenAI(
       console.error(
         `[error] ${who} rejected the API key (${upstream.status}). ` +
           `This is your backend key, not Claude Code's login. ` +
-          `Run 'claude-code-free --doctor' to check the config.`,
+          `Run 'oscar --doctor' to check the config.`,
       );
     }
     const message = auth
       ? `Your backend rejected the request (${upstream.status}). ${who} refused the API key — ` +
-        `this is not a Claude Code login problem. Run 'claude-code-free --doctor' to check the config. ` +
+        `this is not a Claude Code login problem. Run 'oscar --doctor' to check the config. ` +
         `Upstream said: ${text.slice(0, 300)}`
       : `Backend ${who} returned ${upstream.status}: ${text.slice(0, 300)}`;
 
