@@ -27,6 +27,52 @@ const PKG_ROOT = resolve(dirname(__filename), "..");
 // authenticates to the backend with the provider's own key.
 const DUMMY_KEY = "oscar-dummy-key";
 
+/** How the CLI identifies a custom API key in its own state file: the last 20
+ * characters, never the whole key. Approvals and rejections are both recorded
+ * under this id, so anything we write has to use the same form. */
+export function apiKeyId(key) {
+  return String(key ?? "").slice(-20);
+}
+
+/** Record `key` as approved in the CLI profile at `dir`.
+ *
+ * Without this the CLI silently declines to use ANTHROPIC_API_KEY at all — it
+ * requires the key to be pre-approved, and an unapproved one falls straight
+ * through to the OAuth login. In a throwaway profile there is no login, so the
+ * session opens on "Not logged in · Run /login" no matter how well the proxy
+ * and backends are configured.
+ *
+ * Merges rather than overwrites: everything else in the profile is left alone,
+ * and any stale rejection of this same key is cleared at the same time. */
+export function approveApiKey(dir, key) {
+  const file = join(dir, ".claude.json");
+  const id = apiKeyId(key);
+  let data = {};
+  try {
+    if (existsSync(file)) data = JSON.parse(readFileSync(file, "utf8")) ?? {};
+  } catch {
+    // Corrupt state file: start from an empty object rather than fail the
+    // launch. The CLI rebuilds whatever else it needs.
+    data = {};
+  }
+  if (typeof data !== "object" || data === null || Array.isArray(data)) data = {};
+
+  const prev = (typeof data.customApiKeyResponses === "object" && data.customApiKeyResponses) || {};
+  const approved = Array.isArray(prev.approved) ? prev.approved.slice() : [];
+  const rejected = Array.isArray(prev.rejected) ? prev.rejected.filter((k) => k !== id) : [];
+  if (!approved.includes(id)) approved.push(id);
+
+  data.customApiKeyResponses = { ...prev, approved, rejected };
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, JSON.stringify(data, null, 2));
+  } catch {
+    // A read-only profile is not worth failing the launch over; the CLI will
+    // prompt for approval instead.
+  }
+  return data;
+}
+
 /** Is the CLI signing itself in against the vendor cloud, rather than us
  * holding an API key? Mirrors resolveUpstreamAuth() in src/env.ts: an explicit
  * OSCAR_AUTH wins, otherwise no key configured means the CLI must be. */
@@ -509,30 +555,16 @@ async function main() {
     mkdirSync(cleanConfig, { recursive: true });
     process.env.CLAUDE_CONFIG_DIR = cleanConfig;
     seedClaudeProfile(cleanConfig, `node "${join(PKG_ROOT, "bin", "oscar-statusline.mjs")}"`);
-    // The CLI persists API-key rejections into its state file, under
-    // customApiKeyResponses.rejected[]. If a prior run rejected the dummy
-    // key, it shows the login page instead of using the env var. Wipe any
-    // rejected entries for our dummy key so each launch starts clean.
-    const cliState = join(cleanConfig, ".claude.json");
-    if (existsSync(cliState)) {
-      try {
-        const raw = readFileSync(cliState, "utf8");
-        const data = JSON.parse(raw);
-        let changed = false;
-        if (data.customApiKeyResponses && Array.isArray(data.customApiKeyResponses.rejected)) {
-          const filtered = data.customApiKeyResponses.rejected.filter(
-            (k) => k !== DUMMY_KEY,
-          );
-          if (filtered.length !== data.customApiKeyResponses.rejected.length) {
-            data.customApiKeyResponses.rejected = filtered;
-            changed = true;
-          }
-        }
-        if (changed) writeFileSync(cliState, JSON.stringify(data, null, 2));
-      } catch {
-        // corrupt or unreadable — let the CLI recreate it
-      }
-    }
+    // Approve our placeholder key in this profile, or the CLI will not use it.
+    // It only accepts ANTHROPIC_API_KEY when the key is already approved:
+    //
+    //     if (key && config.customApiKeyResponses?.approved?.includes(id(key)))
+    //       return { key, source: "ANTHROPIC_API_KEY" };
+    //
+    // Otherwise it falls through to the OAuth login, finds none in this
+    // throwaway profile, and reports "Not logged in · Run /login" — while the
+    // proxy sits there fully configured with the backend it was going to use.
+    approveApiKey(cleanConfig, DUMMY_KEY);
   }
 
   // 4. Launch the CLI, forwarding args (minus any --setup we already handled).
