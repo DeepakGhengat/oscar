@@ -99,11 +99,12 @@ export async function probeModels(
 
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { banner, box, c, createQuestion, select, type SelectOption } from "./ui.ts";
 import { verifyBackend } from "./preflight.ts";
+import { describeProfile, listProfiles, parseEnvText, saveProfile } from "./profiles.ts";
 
 /** Close readline without triggering the libuv assertion on piped stdin (Windows). */
 function closeRl(rl: { close: () => void; pause?: () => void }): void {
@@ -245,8 +246,29 @@ export async function main(): Promise<void> {
     const dir = process.env.OSCAR_CONFIG;
     const envPath = dir ? resolve(dir, ".env") : resolve(".env");
     if (dir) mkdirSync(dir, { recursive: true });
-    writeFileSync(envPath, formatEnv(cfg));
+
+    // Whatever is being replaced is worth keeping. Without this, setting up a
+    // second backend discards the first — base URL, key and model — and the
+    // only way back is to type it all in again.
+    if (existsSync(envPath)) {
+      try {
+        const previous = readFileSync(envPath, "utf8");
+        if (previous.trim() && !listProfiles().some((p) => p.active)) {
+          saveProfile(profileNameFor(previous), previous);
+        }
+      } catch {
+        // Not worth failing the write over.
+      }
+    }
+
+    const text = formatEnv(cfg);
+    writeFileSync(envPath, text);
     console.log(`${c.green}✓${c.reset} wrote ${envPath}`);
+
+    const saved = saveProfile(preset.id, text);
+    if (saved) {
+      console.log(`${c.green}✓${c.reset} saved as profile ${c.bold}${preset.id}${c.reset}`);
+    }
   } else {
     console.log(`${c.gray}skipped writing .env — exiting without changes.${c.reset}`);
     closeRl(rl);
@@ -272,4 +294,18 @@ if (isMain) {
     console.error(err);
     process.exitCode = 1;
   });
+}
+/** A profile name for a config we are about to replace, derived from what it
+ * actually is rather than from whichever preset happened to create it. */
+export function profileNameFor(envText: string): string {
+  const env = parseEnvText(envText);
+  if (["1", "true", "yes", "on"].includes((env.USE_OPENAI_API ?? "").toLowerCase())) {
+    const host = (env.OPENAI_BASE_URL ?? "").replace(/^https?:\/\//, "").split(/[/:]/)[0] ?? "";
+    if (host.includes("ollama")) return "ollama";
+    if (host.includes("deepseek")) return "deepseek";
+    if (host.includes("openai")) return "openai";
+    if (host === "localhost" || host === "127.0.0.1") return "local";
+    return host ? host.replace(/\./g, "-") : "openai-compatible";
+  }
+  return describeProfile(envText).startsWith("Anthropic API key") ? "passthrough" : "subscription";
 }

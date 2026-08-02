@@ -7,7 +7,7 @@ O.S.C.A.R. is a local translation proxy that lets your coding CLI drive any Open
 Point the CLI at O.S.C.A.R. instead of the vendor API and every request is rewritten into OpenAI Chat Completions on the way out and back again on the way in — tools, streaming, images and token accounting included. Local Ollama, DeepSeek, OpenAI, LM Studio, vLLM, or several of them at once, all selectable from the CLI's own `/model` picker. Nothing about the CLI is patched.
 
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-335%20passing-2ea043)](#development)
+[![Tests](https://img.shields.io/badge/tests-354%20passing-2ea043)](#development)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Dependencies](https://img.shields.io/badge/runtime%20deps-1-8957e5)](package.json)
 [![Issues](https://img.shields.io/badge/issues-open-0969da)](https://github.com/DeepakGhengat/oscar/issues)
@@ -23,7 +23,7 @@ Point the CLI at O.S.C.A.R. instead of the vendor API and every request is rewri
 - **Several backends at once.** Local Ollama *and* DeepSeek *and* OpenAI in one list, each with its own base URL and key. Two backends serving the same model name stay individually addressable.
 - **It tells you when your key is wrong.** Listing models proves almost nothing — on many hosted backends that endpoint is public. O.S.C.A.R. verifies with a real completion during setup and on demand, so a bad key fails at setup instead of mid-conversation. [Why this matters](#why-listing-models-proves-nothing).
 - **Nothing is patched.** The CLI is launched unmodified, against a throwaway profile, and torn down cleanly. Flip one flag and every request goes to the real vendor API untouched.
-- **One dependency, no build step.** TypeScript run through `tsx`; 335 offline tests.
+- **One dependency, no build step.** TypeScript run through `tsx`; 354 offline tests.
 
 ## Quick Start
 
@@ -115,6 +115,29 @@ PROXY_PORT=8787
 
 Then run `oscar --doctor` before `oscar` — a hosted backend that lists models without a key will still reject a real completion, and the doctor is what catches that.
 
+### Switching between Anthropic and open models
+
+Every `oscar --setup` saves what it wrote, so configuring a second backend no longer discards the first:
+
+```bash
+oscar --profiles          # ollama         glm-5.2:cloud via ollama.com/v1
+                          # ● subscription  Anthropic account sign-in
+
+oscar --use ollama        # switch to open models
+oscar --use subscription  # switch back to your Claude plan
+```
+
+`--setup` is a first-run wizard and rewrites the whole config. `--use` is the switch.
+
+For a one-off run without changing anything, `USE_OPENAI_API` overrides the file — it is the master switch between the two worlds:
+
+```powershell
+$env:USE_OPENAI_API=0; oscar    # Anthropic, just this once
+$env:USE_OPENAI_API=1; oscar    # open models, just this once
+```
+
+**Why `/model` shows only Claude's models in Anthropic mode:** backend model discovery is deliberately switched off there, because the CLI is talking to Anthropic directly and there is no proxy in between. Switch to an OpenAI-compatible profile and your backend models reappear.
+
 ## Setup Guides
 
 - [Getting Started](docs/GETTING_STARTED.md) — zero to working, nothing assumed
@@ -190,6 +213,8 @@ Set `OSCAR_PROXY=1` to route through the proxy anyway — useful for the request
 | `oscar --doctor` | Check every backend, ending with a live completion. Exits non-zero on failure |
 | `oscar --model` | Pick a model and write it to `.env` |
 | `oscar --switch` | Hot-swap the model on a **running** proxy, from a second terminal |
+| `oscar --profiles` | List saved configurations |
+| `oscar --use <name>` | Switch to a saved configuration |
 | `oscar --agent` | Run O.S.C.A.R.'s own built-in agent instead of the coding CLI (OpenAI-compatible backends only) |
 
 ## Configuration
@@ -354,7 +379,7 @@ Longer, symptom-first version: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md
 
 ```bash
 npm install
-npm test          # 335 tests, entirely offline
+npm test          # 354 tests, entirely offline
 npm run typecheck
 npm start         # run just the proxy, without the CLI
 ```
@@ -391,7 +416,7 @@ scripts/    Shell launchers and CLI vendoring
 commands/   Slash-command definition
 skills/     Skill definition
 docs/       Setup, provider and troubleshooting guides
-test/       335 tests
+test/       354 tests
 ```
 
 ## Compatibility
