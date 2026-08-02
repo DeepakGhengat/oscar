@@ -11,3 +11,5 @@ export declare function newestVersioned(
 ): { path: string; version: string } | null;
 
 export declare function isCliEntry(argv1: string | undefined, self: string): boolean;
+
+export declare function isSubscriptionAuth(env?: Record<string, string | undefined>): boolean;

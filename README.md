@@ -7,7 +7,7 @@ O.S.C.A.R. is a local translation proxy that lets your coding CLI drive any Open
 Point the CLI at O.S.C.A.R. instead of the vendor API and every request is rewritten into OpenAI Chat Completions on the way out and back again on the way in — tools, streaming, images and token accounting included. Local Ollama, DeepSeek, OpenAI, LM Studio, vLLM, or several of them at once, all selectable from the CLI's own `/model` picker. Nothing about the CLI is patched.
 
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-228%20passing-2ea043)](#development)
+[![Tests](https://img.shields.io/badge/tests-244%20passing-2ea043)](#development)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Dependencies](https://img.shields.io/badge/runtime%20deps-1-8957e5)](package.json)
 [![Issues](https://img.shields.io/badge/issues-open-0969da)](https://github.com/DeepakGhengat/oscar/issues)
@@ -23,7 +23,7 @@ Point the CLI at O.S.C.A.R. instead of the vendor API and every request is rewri
 - **Several backends at once.** Local Ollama *and* DeepSeek *and* OpenAI in one list, each with its own base URL and key. Two backends serving the same model name stay individually addressable.
 - **It tells you when your key is wrong.** Listing models proves almost nothing — on many hosted backends that endpoint is public. O.S.C.A.R. verifies with a real completion during setup and on demand, so a bad key fails at setup instead of mid-conversation. [Why this matters](#why-listing-models-proves-nothing).
 - **Nothing is patched.** The CLI is launched unmodified, against a throwaway profile, and torn down cleanly. Flip one flag and every request goes to the real vendor API untouched.
-- **One dependency, no build step.** TypeScript run through `tsx`; 228 offline tests.
+- **One dependency, no build step.** TypeScript run through `tsx`; 244 offline tests.
 
 ## Quick Start
 
@@ -134,9 +134,31 @@ Anything exposing OpenAI-compatible `/models` and `/chat/completions` should wor
 | LM Studio (local) | `oscar --setup` → *LM Studio* | `http://localhost:1234/v1` |
 | vLLM (local) | `oscar --setup` → *vLLM* | `http://localhost:8000/v1` |
 | Any OpenAI-compatible | `oscar --setup` → *Custom* | llama.cpp, LiteLLM, OpenRouter, Together, Groq, and others |
-| Passthrough | `oscar --setup` → *Passthrough* | Every request goes to the real vendor API, untouched |
+| Anthropic account sign-in | `oscar --setup` → *Account sign-in* | Your Pro / Max / Team subscription or enterprise SSO. No key stored — see below |
+| Anthropic API key | `oscar --setup` → *API key* | Passthrough with a key you hold |
 
 Several of these can be active at the same time — see [Configuration](#configuration).
+
+### Using your Anthropic subscription
+
+If you pay for Claude — Pro, Max, Team, or an enterprise plan with SSO — you do not need an API key. The CLI signs in against your account and manages its own short-lived credentials.
+
+```bash
+oscar --setup     # choose "Anthropic account sign-in"
+oscar             # then run /login inside the CLI if you aren't signed in yet
+```
+
+Or set it directly in `~/.oscar/.env`:
+
+```bash
+OSCAR_AUTH=subscription
+```
+
+In this mode O.S.C.A.R. **gets out of the way completely**: no proxy is started, `ANTHROPIC_BASE_URL` is left alone, no throwaway config directory is used, and no key is injected. `oscar` stays your single entry point, while `/login`, SSO, Bedrock and Vertex behave exactly as they would if you ran the CLI directly.
+
+Set `OSCAR_PROXY=1` to route through the proxy anyway — useful for the request log. Your sign-in still works: the proxy forwards the CLI's credentials untouched and never adds an `x-api-key` of its own.
+
+> **Why this needed care.** A signed-in CLI sends `Authorization: Bearer …` and no `x-api-key`. The proxy used to force an `x-api-key` header onto every passthrough request, so a subscription login arrived carrying a valid token *and* an empty api-key header — which the API rejects. It now only ever fills a gap, never overwrites. Pinned by tests in `test/subscription-auth.test.ts`.
 
 ## What Works
 
@@ -150,6 +172,7 @@ Several of these can be active at the same time — see [Configuration](#configu
 - **Per-model token ceilings** — cap a small local model without touching the others
 - **Live model hot-swap** — `oscar --switch` changes the model on a *running* proxy from a second terminal
 - **Health checks** — `oscar --doctor` proves the setup works with a real completion and exits non-zero on failure
+- **Anthropic subscription sign-in** — use your Pro / Max / Team plan or enterprise SSO, no API key needed
 - **Passthrough mode** — one flag sends everything to the real vendor API, unmodified
 
 ## Commands
@@ -173,6 +196,8 @@ Several of these can be active at the same time — see [Configuration](#configu
 | `OPENAI_API_KEY` | Backend key | required when routing |
 | `OPENAI_MODEL` | Default model | required when routing |
 | `OSCAR_MAX_OUTPUT_TOKENS` | Clamp on `max_tokens` — the CLI asks for a 200k-context budget | unset (no clamp) |
+| `OSCAR_AUTH` | `subscription` to let the CLI sign in with your account, `api-key` to use a key you hold | inferred from whether a key is set |
+| `OSCAR_PROXY` | `1` to route subscription traffic through the proxy anyway | unset (direct launch) |
 | `OSCAR_UPSTREAM_BASE_URL` | Passthrough target, if not the default vendor endpoint | `https://api.anthropic.com` |
 | `OSCAR_CONFIG` | Config directory | `~/.oscar` |
 | `PROXY_PORT` | Port the proxy listens on | `8787` |
@@ -318,7 +343,7 @@ Longer, symptom-first version: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md
 
 ```bash
 npm install
-npm test          # 228 tests, entirely offline
+npm test          # 244 tests, entirely offline
 npm run typecheck
 npm start         # run just the proxy, without the CLI
 ```
@@ -355,7 +380,7 @@ scripts/    Shell launchers and CLI vendoring
 commands/   Slash-command definition
 skills/     Skill definition
 docs/       Setup, provider and troubleshooting guides
-test/       228 tests
+test/       244 tests
 ```
 
 ## Compatibility

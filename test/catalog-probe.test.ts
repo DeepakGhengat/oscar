@@ -86,6 +86,7 @@ function cfg(over: Partial<ProxyConfig> = {}): ProxyConfig {
     maxOutputTokens: null,
     upstreamKey: null,
     upstreamBaseURL: "https://api.anthropic.com",
+    upstreamAuth: "api-key",
     port: 8787,
     ...over,
   };

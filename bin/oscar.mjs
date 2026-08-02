@@ -27,6 +27,17 @@ const PKG_ROOT = resolve(dirname(__filename), "..");
 // authenticates to the backend with the provider's own key.
 const DUMMY_KEY = "oscar-dummy-key";
 
+/** Is the CLI signing itself in against the vendor cloud, rather than us
+ * holding an API key? Mirrors resolveUpstreamAuth() in src/env.ts: an explicit
+ * OSCAR_AUTH wins, otherwise no key configured means the CLI must be. */
+export function isSubscriptionAuth(env = process.env) {
+  if (isTruthy(env.USE_OPENAI_API)) return false;
+  const declared = (env.OSCAR_AUTH ?? "").trim().toLowerCase();
+  if (["subscription", "oauth", "sso", "login"].includes(declared)) return true;
+  if (["api-key", "apikey", "key"].includes(declared)) return false;
+  return !(env.ANTHROPIC_API_KEY ?? "").trim();
+}
+
 /* --------------------------- config location ----------------------------- */
 
 function configDir() {
@@ -254,6 +265,25 @@ async function main() {
     }
   }
 
+  // Subscription sign-in: the CLI authenticates itself against the vendor
+  // cloud — a Pro/Max/Team login, or enterprise SSO — using short-lived OAuth
+  // credentials it refreshes on its own. Those live in the CLI's own config
+  // (or the OS keychain), and nothing here can substitute for them.
+  //
+  // So we get out of the way completely: no proxy, no ANTHROPIC_BASE_URL
+  // override, no throwaway CLAUDE_CONFIG_DIR, no injected key. `oscar` stays
+  // the single entry point, and `/login`, SSO, Bedrock and Vertex all behave
+  // exactly as they would without it.
+  //
+  // OSCAR_PROXY=1 opts back into routing through the proxy — useful for the
+  // request log — and the proxy forwards the CLI's credentials untouched.
+  if (isSubscriptionAuth() && !isTruthy(process.env.OSCAR_PROXY)) {
+    console.log("Subscription sign-in: launching the CLI with its own credentials.");
+    console.log(`${"Run /login inside the CLI if you are not signed in yet."}`);
+    launchCli(args);
+    return;
+  }
+
   // 1. Start proxy.
   console.log(`Starting proxy on port ${port} ...`);
   const serverTs = join(PKG_ROOT, "src", "server.ts");
@@ -331,6 +361,12 @@ async function main() {
   }
 
   // 4. Launch the CLI, forwarding args (minus any --setup we already handled).
+  launchCli(args, killProxy);
+}
+
+/** Spawn the CLI with the environment as currently prepared, and mirror its
+ * exit code. `onExit` tears down anything we started alongside it. */
+function launchCli(args, onExit = () => {}) {
   const cliArgs = args.filter((a) => a !== "--setup" && a !== "--switch" && a !== "--doctor");
   const cliBin = findCliBin();
   console.log(
@@ -342,11 +378,11 @@ async function main() {
       `Could not launch the CLI (${cliBin.path}): ${err.message}\n` +
       `Install it with: npm i -g @anthropic-ai/claude-code`,
     );
-    killProxy();
+    onExit();
     process.exit(1);
   });
   cli.on("exit", (code) => {
-    killProxy();
+    onExit();
     process.exit(code ?? 0);
   });
 }
