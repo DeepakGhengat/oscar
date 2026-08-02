@@ -253,12 +253,40 @@ async function passthroughUpstream(
 
   const upstream = await fetch(url, init);
 
-  // Stream the upstream response straight back.
+  // Stream the upstream response straight back, minus the headers that no
+  // longer describe what we are sending.
   return new Response(upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,
-    headers: upstream.headers,
+    headers: forwardableHeaders(upstream.headers),
   });
+}
+
+/** Headers that describe the *upstream* transfer, not ours.
+ *
+ * fetch() transparently decompresses the body, so `content-encoding: gzip`
+ * arrives attached to bytes that are no longer gzipped. Forwarding it makes
+ * the client try to inflate plain JSON and fail with a ZlibError. The lengths
+ * and framing headers are equally stale once the body has been re-emitted. */
+const STRIPPED_RESPONSE_HEADERS = new Set([
+  "content-encoding",
+  "content-length",
+  "transfer-encoding",
+  "connection",
+  "keep-alive",
+  "upgrade",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+]);
+
+export function forwardableHeaders(h: Headers): Headers {
+  const out = new Headers();
+  h.forEach((v, k) => {
+    if (!STRIPPED_RESPONSE_HEADERS.has(k.toLowerCase())) out.append(k, v);
+  });
+  return out;
 }
 
 /* ------------------------------- dispatch --------------------------------- */

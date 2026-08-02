@@ -4,7 +4,7 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { loadConfig } from "./env.ts";
-import { routeMessageRequest } from "./proxy.ts";
+import { forwardableHeaders, routeMessageRequest } from "./proxy.ts";
 import { clearCatalogCache, getCatalog, modelsResponse, warmCatalog } from "./catalog.ts";
 import { DEFAULT_PROVIDER, loadProviders } from "./providers.ts";
 import { estimateInputTokens } from "./tokens.ts";
@@ -234,7 +234,9 @@ const server = createServer(async (req, res) => {
   if (body.length) init.body = new Uint8Array(body);
   try {
     const upstream = await fetch(`${cfg.upstreamBaseURL}${path}`, init);
-    writeWebResponse(res, upstream.status, upstream.headers);
+    // fetch() already decompressed the body; forwarding content-encoding with
+    // it makes the client try to inflate plain bytes.
+    writeWebResponse(res, upstream.status, forwardableHeaders(upstream.headers));
     await pumpWebBody(res, upstream.body as ReadableStream<Uint8Array> | Uint8Array | null);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
