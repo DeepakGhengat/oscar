@@ -27,6 +27,79 @@ const PKG_ROOT = resolve(dirname(__filename), "..");
 // authenticates to the backend with the provider's own key.
 const DUMMY_KEY = "oscar-dummy-key";
 
+/** How the CLI identifies a custom API key in its own state file: the last 20
+ * characters, never the whole key. Approvals and rejections are both recorded
+ * under this id, so anything we write has to use the same form. */
+export function apiKeyId(key) {
+  return String(key ?? "").slice(-20);
+}
+
+/** Record `key` as approved in the CLI profile at `dir`.
+ *
+ * Without this the CLI silently declines to use ANTHROPIC_API_KEY at all — it
+ * requires the key to be pre-approved, and an unapproved one falls straight
+ * through to the OAuth login. In a throwaway profile there is no login, so the
+ * session opens on "Not logged in · Run /login" no matter how well the proxy
+ * and backends are configured.
+ *
+ * Merges rather than overwrites: everything else in the profile is left alone,
+ * and any stale rejection of this same key is cleared at the same time. */
+export function approveApiKey(dir, key) {
+  const file = join(dir, ".claude.json");
+  const id = apiKeyId(key);
+  let data = {};
+  try {
+    if (existsSync(file)) data = JSON.parse(readFileSync(file, "utf8")) ?? {};
+  } catch {
+    // Corrupt state file: start from an empty object rather than fail the
+    // launch. The CLI rebuilds whatever else it needs.
+    data = {};
+  }
+  if (typeof data !== "object" || data === null || Array.isArray(data)) data = {};
+
+  const prev = (typeof data.customApiKeyResponses === "object" && data.customApiKeyResponses) || {};
+  const approved = Array.isArray(prev.approved) ? prev.approved.slice() : [];
+  const rejected = Array.isArray(prev.rejected) ? prev.rejected.filter((k) => k !== id) : [];
+  if (!approved.includes(id)) approved.push(id);
+
+  data.customApiKeyResponses = { ...prev, approved, rejected };
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, JSON.stringify(data, null, 2));
+  } catch {
+    // A read-only profile is not worth failing the launch over; the CLI will
+    // prompt for approval instead.
+  }
+  return data;
+}
+
+/** Is `--model` being used on its own, meaning our offline picker?
+ *
+ * `--model <id>` belongs to the CLI, which takes a model for the session. We
+ * used to claim the flag either way and drop the id, so `oscar --model
+ * claude-oscar-glm-5.2-cloud` opened a picker instead of starting on that
+ * model. Only the bare form is ours. */
+export function isBareModelFlag(args) {
+  const i = args.indexOf("--model");
+  if (i < 0) return false;
+  const next = args[i + 1];
+  return next === undefined || next.startsWith("-");
+}
+
+/** Both worlds at once: an OpenAI-compatible backend *and* the Anthropic
+ * account, selectable from one `/model` list.
+ *
+ * Mirrors the `hybrid` field in src/env.ts. The Anthropic side must be
+ * configured deliberately — inferring it from an absent key would turn this on
+ * for every plain OpenAI setup, and the CLI opens on an Anthropic tier, so the
+ * first message would call a vendor the user never signed in to. */
+export function isHybrid(env = process.env) {
+  if (!isTruthy(env.USE_OPENAI_API)) return false;
+  const declared = (env.OSCAR_AUTH ?? "").trim().toLowerCase();
+  if (["subscription", "oauth", "sso", "login"].includes(declared)) return true;
+  return Boolean((env.ANTHROPIC_API_KEY ?? "").trim());
+}
+
 /** Is the CLI signing itself in against the vendor cloud, rather than us
  * holding an API key? Mirrors resolveUpstreamAuth() in src/env.ts: an explicit
  * OSCAR_AUTH wins, otherwise no key configured means the CLI must be. */
@@ -335,7 +408,10 @@ async function main() {
   // rewrite OPENAI_MODEL in .env, then exit (re-run without --model to
   // launch). If --model is combined with other args, we still just switch
   // and exit — the user can launch separately.
-  if (args.includes("--model")) {
+  // Bare `--model` is our offline picker. `--model <id>` is the CLI's own flag
+  // and must reach it: swallowing the id here meant the one command that names
+  // a model directly silently did something else.
+  if (isBareModelFlag(args)) {
     const dir = configDir();
     if (process.env.OSCAR_CONFIG === undefined) {
       process.env.OSCAR_CONFIG = dir;
@@ -368,6 +444,25 @@ async function main() {
     process.exit(Number(process.env.OSCAR_SETUP_EXIT ?? 0));
   }
 
+  // --profiles / --use: saved configurations. `--setup` rewrites the whole
+  // .env, so without these, configuring a second backend silently discards
+  // the first one and the only way back is to retype it.
+  if (args.includes("--profiles") || args.includes("--use")) {
+    const dir = configDir();
+    if (process.env.OSCAR_CONFIG === undefined) {
+      process.env.OSCAR_CONFIG = dir;
+    }
+    const tsx = findTsx();
+    const cmdTs = join(PKG_ROOT, "src", "profilecmd.ts");
+    const passed = args.filter((a) => a !== "--profiles");
+    if (tsx) {
+      await runNode([tsx, cmdTs, ...passed], { stdio: "inherit" });
+    } else {
+      await runNode(["tsx", cmdTs, ...passed], { stdio: "inherit", useNpx: true });
+    }
+    process.exit(Number(process.env.OSCAR_SETUP_EXIT ?? 0));
+  }
+
   // --switch: talk to a *running* proxy's /_oscar/ control endpoints and
   // hot-swap the backend model live, without restarting the CLI. Use from a
   // second terminal while the CLI is running in the first.
@@ -396,33 +491,17 @@ async function main() {
     process.exit(1);
   }
 
-  // Account sign-in is an external-CLI mode by definition: the credentials
-  // belong to that vendor's application and only it can use them. O.S.C.A.R.'s
-  // own agent speaks OpenAI Chat Completions to a backend of your choosing, so
-  // there is nothing for it to talk to here. Route straight to CLI mode rather
-  // than dropping into an agent with no backend.
-  if (isSubscriptionAuth() && !isTruthy(process.env.OSCAR_PROXY) && !args.includes("--cli")) {
-    // `oscar` never hands the terminal to a third-party CLI on its own. A
-    // config left over from that mode is a configuration problem to fix, not
-    // a reason to launch someone else's interface.
-    console.error(
-      `${C.bold}This config selects Anthropic account sign-in.${C.reset}\n\n` +
-      `Those credentials belong to Anthropic's own CLI, so the O.S.C.A.R. agent\n` +
-      `has no backend to call — and O.S.C.A.R. will not launch another product's\n` +
-      `interface for you.\n\n` +
-      `  ${C.bold}oscar --setup${C.reset}   choose a backend the O.S.C.A.R. agent can drive\n` +
-      `  ${C.bold}oscar --cli${C.reset}     explicitly run Anthropic's CLI with that sign-in\n`,
-    );
-    process.exit(1);
-  }
-
-  // Default mode: O.S.C.A.R.'s own agent and interface. No proxy, no second
-  // process, no third-party CLI. `--cli` opts back into driving an external
-  // CLI through the translation proxy, which is what this used to be.
-  if (!args.includes("--cli")) {
+  // O.S.C.A.R.'s own agent, when asked for by name. It speaks OpenAI Chat
+  // Completions directly to a backend, with no proxy and no second process.
+  //
+  // It is opt-in, not the default. This product is a translation proxy and a
+  // launcher for the coding CLI: that is what the config describes, what the
+  // alias layer exists to serve, and what people install it for. Renaming the
+  // product did not change what it does.
+  if (args.includes("--agent")) {
     const tsx = findTsx();
     const mainTs = join(PKG_ROOT, "src", "tui", "main.ts");
-    const forwarded = args.filter((a) => a !== "--cli");
+    const forwarded = args.filter((a) => a !== "--agent");
     if (tsx) {
       await runNode([tsx, mainTs, ...forwarded], { stdio: "inherit" });
     } else {
@@ -513,42 +592,49 @@ async function main() {
   process.env.ANTHROPIC_BASE_URL = `http://localhost:${port}`;
   process.env.OSCAR_UPSTREAM_BASE_URL = "https://api.anthropic.com";
   if (isTruthy(process.env.USE_OPENAI_API)) {
-    process.env.ANTHROPIC_API_KEY = DUMMY_KEY;
     // Make the backend's models show up in /model. The CLI only performs
     // gateway model discovery (GET $ANTHROPIC_BASE_URL/v1/models) when this is
     // set; the other preconditions — first-party provider and a base URL that
     // isn't api.anthropic.com — already hold here. The variable name is the
     // CLI's, not ours.
     process.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1";
+
+    // Hybrid: both worlds in one picker. Backend models are translated, and
+    // an Anthropic tier id goes to the vendor on the CLI's own credentials —
+    // which only works if we leave those credentials alone. So no placeholder
+    // key and no throwaway profile here: substituting either is exactly what
+    // would break the half of the picker this mode exists to provide.
+    if (isHybrid()) {
+      console.log(
+        `${C.dim}Hybrid: backend models and your Anthropic account in one ${C.reset}/model${C.dim} list.${C.reset}`,
+      );
+      const profile = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+      try {
+        mkdirSync(profile, { recursive: true });
+        seedClaudeProfile(profile, `node "${join(PKG_ROOT, "bin", "oscar-statusline.mjs")}"`);
+      } catch {
+        // A read-only profile is not worth failing the launch over.
+      }
+      launchCli(args, killProxy, port);
+      return;
+    }
+
+    process.env.ANTHROPIC_API_KEY = DUMMY_KEY;
     // Bypass stored expired OAuth credentials so the env-var key is used.
     const cleanConfig = join(homedir(), ".oscar", "cli-profile");
     mkdirSync(cleanConfig, { recursive: true });
     process.env.CLAUDE_CONFIG_DIR = cleanConfig;
     seedClaudeProfile(cleanConfig, `node "${join(PKG_ROOT, "bin", "oscar-statusline.mjs")}"`);
-    // The CLI persists API-key rejections into its state file, under
-    // customApiKeyResponses.rejected[]. If a prior run rejected the dummy
-    // key, it shows the login page instead of using the env var. Wipe any
-    // rejected entries for our dummy key so each launch starts clean.
-    const cliState = join(cleanConfig, ".claude.json");
-    if (existsSync(cliState)) {
-      try {
-        const raw = readFileSync(cliState, "utf8");
-        const data = JSON.parse(raw);
-        let changed = false;
-        if (data.customApiKeyResponses && Array.isArray(data.customApiKeyResponses.rejected)) {
-          const filtered = data.customApiKeyResponses.rejected.filter(
-            (k) => k !== DUMMY_KEY,
-          );
-          if (filtered.length !== data.customApiKeyResponses.rejected.length) {
-            data.customApiKeyResponses.rejected = filtered;
-            changed = true;
-          }
-        }
-        if (changed) writeFileSync(cliState, JSON.stringify(data, null, 2));
-      } catch {
-        // corrupt or unreadable — let the CLI recreate it
-      }
-    }
+    // Approve our placeholder key in this profile, or the CLI will not use it.
+    // It only accepts ANTHROPIC_API_KEY when the key is already approved:
+    //
+    //     if (key && config.customApiKeyResponses?.approved?.includes(id(key)))
+    //       return { key, source: "ANTHROPIC_API_KEY" };
+    //
+    // Otherwise it falls through to the OAuth login, finds none in this
+    // throwaway profile, and reports "Not logged in · Run /login" — while the
+    // proxy sits there fully configured with the backend it was going to use.
+    approveApiKey(cleanConfig, DUMMY_KEY);
   }
 
   // 4. Launch the CLI, forwarding args (minus any --setup we already handled).

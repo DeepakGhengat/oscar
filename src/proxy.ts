@@ -74,6 +74,19 @@ export function callerIsAuthenticated(headers: Headers): boolean {
   );
 }
 
+/** Does this model id name something one of our backends actually serves?
+ *
+ * True for an alias we advertised, and for a real backend id typed straight
+ * into `/model`. False for the CLI's own tier ids — which is what tells hybrid
+ * routing to send the request to the vendor instead. */
+export async function isBackendModel(
+  cfg: ProxyConfig,
+  bodyModel: string | undefined,
+): Promise<boolean> {
+  if (!bodyModel) return false;
+  return toBackendModel(await getCatalog(cfg), bodyModel) !== null;
+}
+
 /** Headers to force on a passthrough request.
  *
  * Only ever *adds* credentials, never replaces them. Injecting our own
@@ -308,6 +321,20 @@ export async function routeMessageRequest(
   const parsed = body ? (JSON.parse(typeof body === "string" ? body : new TextDecoder().decode(body)) as MessagesRequest) : undefined;
 
   if (cfg.useOpenAI && parsed) {
+    // Hybrid: one `/model` list spanning both worlds. Our aliases are the only
+    // ids that mean "a backend model" — anything else the CLI sends is one of
+    // its own tiers, and in hybrid that is a deliberate choice by the user, so
+    // it goes to the vendor on the CLI's own credentials rather than being
+    // quietly answered by whichever backend happens to be the default.
+    if (cfg.hybrid && !(await isBackendModel(cfg, parsed.model))) {
+      const response = await passthroughUpstream(cfg, "/v1/messages", "POST", headers, body);
+      return {
+        response,
+        route: "upstream",
+        incomingModel: parsed.model,
+        upstreamModel: parsed.model,
+      };
+    }
     const target = await resolveTarget(cfg, parsed.model);
     const response = await callOpenAI(parsed, target);
     return {

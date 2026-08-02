@@ -90,6 +90,14 @@ export function loadConfig(): ProxyConfig {
     if (!openAIModel) throw new Error("USE_OPENAI_API=1 but OPENAI_MODEL is not set");
   }
 
+  // Hybrid needs the Anthropic side configured *on purpose*. Inferring it from
+  // an absent key would switch it on for every plain OpenAI setup, and the
+  // CLI's opening model is an Anthropic tier — so a session would start by
+  // calling a vendor the user never signed in to.
+  const declaredAuth = (process.env.OSCAR_AUTH ?? "").trim().toLowerCase();
+  const anthropicOnPurpose =
+    ["subscription", "oauth", "sso", "login"].includes(declaredAuth) || Boolean(upstreamKey);
+
   return {
     useOpenAI,
     openAIKey,
@@ -99,6 +107,7 @@ export function loadConfig(): ProxyConfig {
     upstreamKey,
     upstreamBaseURL,
     upstreamAuth: resolveUpstreamAuth(process.env.OSCAR_AUTH, upstreamKey),
+    hybrid: useOpenAI && anthropicOnPurpose,
     port,
   };
 }

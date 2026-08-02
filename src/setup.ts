@@ -14,10 +14,11 @@ export interface ProviderPreset {
   kind: "cloud" | "local" | "custom" | "subscription" | "passthrough";
 }
 
-/** Can the O.S.C.A.R. agent talk to this preset directly?
+/** Can O.S.C.A.R.'s built-in agent (`oscar --agent`) talk to this preset
+ * directly? Only OpenAI-compatible backends qualify — the Anthropic modes are
+ * driven by the coding CLI, which is the default launcher path.
  *
- * Only OpenAI-compatible backends qualify. The Anthropic modes hand off to a
- * third-party CLI, so they are not part of the default product. */
+ * This describes a capability. It is not a filter on what the wizard offers. */
 export function agentCapable(p: ProviderPreset): boolean {
   return p.kind !== "subscription" && p.kind !== "passthrough";
 }
@@ -41,6 +42,9 @@ export interface SetupConfig {
   upstreamKey: string | null;
   /** Set when the CLI signs itself in and holds no key on our side. */
   subscription?: boolean;
+  /** Keep the Anthropic account available alongside the backend, so one
+   * `/model` list spans both. */
+  hybrid?: boolean;
   port: number;
 }
 
@@ -60,8 +64,9 @@ export function formatEnv(cfg: SetupConfig): string {
     lines.push(`OPENAI_MODEL=${cfg.openAIModel ?? ""}`);
     lines.push(`OPENAI_BASE_URL=${cfg.openAIBaseURL ?? ""}`);
   }
-  if (cfg.subscription) {
+  if (cfg.subscription || cfg.hybrid) {
     // No key to store: the CLI signs itself in and refreshes its own token.
+    // Alongside USE_OPENAI_API=1 this is what turns on hybrid routing.
     lines.push(`OSCAR_AUTH=subscription`);
   }
   if (cfg.upstreamKey) {
@@ -98,11 +103,12 @@ export async function probeModels(
 
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { banner, box, c, createQuestion, select, type SelectOption } from "./ui.ts";
 import { verifyBackend } from "./preflight.ts";
+import { describeProfile, listProfiles, parseEnvText, saveProfile } from "./profiles.ts";
 
 /** Close readline without triggering the libuv assertion on piped stdin (Windows). */
 function closeRl(rl: { close: () => void; pause?: () => void }): void {
@@ -135,13 +141,11 @@ export async function main(): Promise<void> {
   const rl = createInterface({ input, output });
   console.log(banner("O.S.C.A.R. setup", "Orchestrator for System Coding & Autonomous Routing"));
 
-  // Only backends the O.S.C.A.R. agent can actually drive are offered. The two
-  // Anthropic modes launch a third-party CLI instead of O.S.C.A.R., which is
-  // not what this product is; they stay reachable with `oscar --setup --cli`
-  // for anyone who still wants that.
-  const presets = process.argv.includes("--cli")
-    ? PROVIDER_PRESETS
-    : PROVIDER_PRESETS.filter((p) => agentCapable(p));
+  // Every backend is offered, including both Anthropic modes. Account sign-in
+  // is how a paid plan is used at all, and it is the reason the launcher knows
+  // how to find and start the coding CLI. Hiding those two would remove the
+  // product's original purpose, not rebrand it.
+  const presets = PROVIDER_PRESETS;
 
   const providerOptions: SelectOption[] = presets.map((p) => ({
     label: p.label,
@@ -229,10 +233,25 @@ export async function main(): Promise<void> {
     }
   }
 
-  const cfg: SetupConfig = { useOpenAI, openAIKey, openAIModel, openAIBaseURL, upstreamKey, subscription, port };
+  // Both worlds in one picker. Opt-in, and default no: the CLI opens on an
+  // Anthropic tier, so switching this on without a Claude plan would make the
+  // very first message fail against a vendor the user never signed in to.
+  let hybrid = false;
+  if (useOpenAI) {
+    console.log(
+      `\n${c.dim}You can also keep your Anthropic account in the same ${c.reset}/model${c.dim} list,\n` +
+      `so one session switches between ${openAIModel ?? "backend models"} and Claude.\n` +
+      `Needs a Claude plan or an API key — the CLI signs itself in.${c.reset}`,
+    );
+    const both = (await ask(rl, "Include your Anthropic account in /model?", "n")).trim().toLowerCase();
+    hybrid = both.startsWith("y");
+  }
+
+  const cfg: SetupConfig = { useOpenAI, openAIKey, openAIModel, openAIBaseURL, upstreamKey, subscription, hybrid, port };
 
   const summary = useOpenAI
-    ? `provider:  ${preset.label}\nbase URL:  ${openAIBaseURL}\nmodel:     ${openAIModel}\nkey:       ${openAIKey ? openAIKey.slice(0, 4) + "..." : "(none)"}\nport:      ${port}`
+    ? `provider:  ${preset.label}\nbase URL:  ${openAIBaseURL}\nmodel:     ${openAIModel}\nkey:       ${openAIKey ? openAIKey.slice(0, 4) + "..." : "(none)"}\nport:      ${port}` +
+      (hybrid ? `\n/model:    backend models + your Anthropic account` : "")
     : subscription
       ? `provider:  ${preset.label}\nauth:      handled by the CLI (no key, no proxy)`
       : `provider:      ${preset.label}\nanthropic key: ${upstreamKey ? upstreamKey.slice(0, 4) + "..." : "(none)"}\nport:          ${port}`;
@@ -246,8 +265,29 @@ export async function main(): Promise<void> {
     const dir = process.env.OSCAR_CONFIG;
     const envPath = dir ? resolve(dir, ".env") : resolve(".env");
     if (dir) mkdirSync(dir, { recursive: true });
-    writeFileSync(envPath, formatEnv(cfg));
+
+    // Whatever is being replaced is worth keeping. Without this, setting up a
+    // second backend discards the first — base URL, key and model — and the
+    // only way back is to type it all in again.
+    if (existsSync(envPath)) {
+      try {
+        const previous = readFileSync(envPath, "utf8");
+        if (previous.trim() && !listProfiles().some((p) => p.active)) {
+          saveProfile(profileNameFor(previous), previous);
+        }
+      } catch {
+        // Not worth failing the write over.
+      }
+    }
+
+    const text = formatEnv(cfg);
+    writeFileSync(envPath, text);
     console.log(`${c.green}✓${c.reset} wrote ${envPath}`);
+
+    const saved = saveProfile(preset.id, text);
+    if (saved) {
+      console.log(`${c.green}✓${c.reset} saved as profile ${c.bold}${preset.id}${c.reset}`);
+    }
   } else {
     console.log(`${c.gray}skipped writing .env — exiting without changes.${c.reset}`);
     closeRl(rl);
@@ -273,4 +313,18 @@ if (isMain) {
     console.error(err);
     process.exitCode = 1;
   });
+}
+/** A profile name for a config we are about to replace, derived from what it
+ * actually is rather than from whichever preset happened to create it. */
+export function profileNameFor(envText: string): string {
+  const env = parseEnvText(envText);
+  if (["1", "true", "yes", "on"].includes((env.USE_OPENAI_API ?? "").toLowerCase())) {
+    const host = (env.OPENAI_BASE_URL ?? "").replace(/^https?:\/\//, "").split(/[/:]/)[0] ?? "";
+    if (host.includes("ollama")) return "ollama";
+    if (host.includes("deepseek")) return "deepseek";
+    if (host.includes("openai")) return "openai";
+    if (host === "localhost" || host === "127.0.0.1") return "local";
+    return host ? host.replace(/\./g, "-") : "openai-compatible";
+  }
+  return describeProfile(envText).startsWith("Anthropic API key") ? "passthrough" : "subscription";
 }
