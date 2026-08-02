@@ -1,8 +1,8 @@
 {
-  "name": "claude-code-free",
+  "name": "oscar",
   "version": "0.1.0",
   "type": "module",
-  "description": "Local proxy that routes Anthropic Claude Code requests to any OpenAI-compatible backend.",
+  "description": "O.S.C.A.R. — Orchestrator for System Coding & Autonomous Routing. Runs Claude Code against any OpenAI-compatible backend.",
   "keywords": [
     "claude-code",
     "ollama",
@@ -16,7 +16,7 @@
   ],
   "license": "MIT",
   "bin": {
-    "claude-code-free": "bin/claude-code-free.mjs"
+    "oscar": "bin/oscar.mjs"
   },
   "files": [
     "src/",

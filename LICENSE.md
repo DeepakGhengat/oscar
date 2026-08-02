@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 claude-code-free contributors
+Copyright (c) 2026 O.S.C.A.R. contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

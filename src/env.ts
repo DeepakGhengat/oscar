@@ -63,7 +63,7 @@ export function loadConfig(): ProxyConfig {
   // Claude Code sizes max_tokens for a 200k-context Claude model. Backends
   // with a smaller ceiling reject the request or truncate mid-answer, so allow
   // an explicit cap. Unset (or non-positive) means "don't clamp".
-  const rawCap = Number(process.env.CCF_MAX_OUTPUT_TOKENS ?? "");
+  const rawCap = Number(process.env.OSCAR_MAX_OUTPUT_TOKENS ?? "");
   const maxOutputTokens = Number.isFinite(rawCap) && rawCap > 0 ? rawCap : null;
 
   if (useOpenAI) {

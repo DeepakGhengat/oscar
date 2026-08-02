@@ -1,15 +1,15 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
-  "name": "claude-code-free",
+  "name": "oscar",
   "version": "0.1.0",
-  "description": "Local proxy that routes Anthropic Claude Code requests to any OpenAI-compatible backend (Ollama, OpenAI, DeepSeek, LM Studio, vLLM).",
+  "description": "O.S.C.A.R. — Orchestrator for System Coding & Autonomous Routing. Runs Claude Code against any OpenAI-compatible backend (Ollama, OpenAI, DeepSeek, LM Studio, vLLM).",
   "owner": {
     "name": "LORDCYBERGOD"
   },
   "plugins": [
     {
-      "name": "claude-code-free",
-      "description": "Route Anthropic Claude Code requests to any OpenAI-compatible backend via a local translation proxy.",
+      "name": "oscar",
+      "description": "O.S.C.A.R. — Orchestrator for System Coding & Autonomous Routing. Runs Claude Code against any OpenAI-compatible backend (Ollama, OpenAI, DeepSeek, LM Studio, vLLM).",
       "version": "0.1.0",
       "source": ".",
       "category": "development"

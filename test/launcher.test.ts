@@ -1,4 +1,4 @@
-// Pure helpers inside bin/claude-code-free.mjs. Importing the launcher must
+// Pure helpers inside bin/oscar.mjs. Importing the launcher must
 // not start a proxy or spawn claude — the CLI entry point is guarded, and the
 // first test here is what proves that guard works.
 
@@ -13,7 +13,7 @@ import {
   isCliEntry,
   newestVersioned,
   parseEnvFile,
-} from "../bin/claude-code-free.mjs";
+} from "../bin/oscar.mjs";
 
 /* ------------------------------- parseEnvFile ----------------------------- */
 
@@ -75,7 +75,7 @@ test("compareVersions treats missing components as zero", () => {
 /* ----------------------------- newestVersioned ---------------------------- */
 
 function makeInstall(versions: string[], exe: string, opts: { skipExe?: string[] } = {}): string {
-  const root = mkdtempSync(join(tmpdir(), "ccf-install-"));
+  const root = mkdtempSync(join(tmpdir(), "oscar-install-"));
   for (const v of versions) {
     mkdirSync(join(root, v), { recursive: true });
     if (!opts.skipExe?.includes(v)) writeFileSync(join(root, v, exe), "");
@@ -117,17 +117,17 @@ test("newestVersioned ignores non-version directories", () => {
 /* ------------------------------- CLI entry -------------------------------- */
 
 test("isCliEntry is true when the file is run directly", () => {
-  const self = fileURLToPath(new URL("../bin/claude-code-free.mjs", import.meta.url));
+  const self = fileURLToPath(new URL("../bin/oscar.mjs", import.meta.url));
   assert.equal(isCliEntry(self, self), true);
 });
 
 test("isCliEntry sees through a symlinked global install", () => {
   // Regression: `npm link`/`npm i -g` puts the package in npm's node_modules
   // as a symlink, so argv[1] is the linked path while import.meta.url is the
-  // real one. Comparing them literally made the global `claude-code-free`
+  // real one. Comparing them literally made the global `oscar`
   // command exit 0 having done nothing at all.
-  const real = fileURLToPath(new URL("../bin/claude-code-free.mjs", import.meta.url));
-  const linkRoot = mkdtempSync(join(tmpdir(), "ccf-link-"));
+  const real = fileURLToPath(new URL("../bin/oscar.mjs", import.meta.url));
+  const linkRoot = mkdtempSync(join(tmpdir(), "oscar-link-"));
   const link = join(linkRoot, "pkg");
   try {
     symlinkSync(join(real, "..", ".."), link, "junction");
@@ -137,7 +137,7 @@ test("isCliEntry sees through a symlinked global install", () => {
     return;
   }
   try {
-    const viaLink = join(link, "bin", "claude-code-free.mjs");
+    const viaLink = join(link, "bin", "oscar.mjs");
     assert.notEqual(viaLink, real, "the test needs the two paths to differ");
     assert.equal(isCliEntry(viaLink, real), true, "the global command would do nothing");
   } finally {
@@ -146,15 +146,15 @@ test("isCliEntry sees through a symlinked global install", () => {
 });
 
 test("isCliEntry is false when imported", () => {
-  const self = fileURLToPath(new URL("../bin/claude-code-free.mjs", import.meta.url));
+  const self = fileURLToPath(new URL("../bin/oscar.mjs", import.meta.url));
   // argv[1] is the test runner, not the launcher.
   assert.equal(isCliEntry(process.argv[1], self), false);
   assert.equal(isCliEntry(undefined, self), false);
 });
 
 test("newestVersioned returns null for a missing or empty root", () => {
-  assert.equal(newestVersioned(join(tmpdir(), "ccf-does-not-exist-xyz"), "claude.exe"), null);
-  const empty = mkdtempSync(join(tmpdir(), "ccf-empty-"));
+  assert.equal(newestVersioned(join(tmpdir(), "oscar-does-not-exist-xyz"), "claude.exe"), null);
+  const empty = mkdtempSync(join(tmpdir(), "oscar-empty-"));
   try {
     assert.equal(newestVersioned(empty, "claude.exe"), null);
   } finally {
