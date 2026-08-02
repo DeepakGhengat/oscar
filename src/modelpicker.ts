@@ -1,8 +1,8 @@
 // `oscar --model`: list models from the configured backend and
 // switch OPENAI_MODEL in the .env without re-running the whole wizard.
 //
-// Unlike OpenClaude (which uses a static provider config), this probes the
-// live backend /models endpoint so the list reflects what's actually
+// Unlike setups that read a static provider config, this probes the
+// live backend /models endpoint so the list reflects what is actually
 // available.
 
 import { createInterface } from "node:readline/promises";

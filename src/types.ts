@@ -3,24 +3,24 @@
 
 /* ----------------------------- Anthropic side ---------------------------- */
 
-export type AnthropicRole = "user" | "assistant";
+export type MessageRole = "user" | "assistant";
 
-export interface AnthropicTextBlock {
+export interface TextBlock {
   type: "text";
   text: string;
   cache_control?: unknown;
 }
 
-export interface AnthropicToolUseBlock {
+export interface ToolUseBlock {
   type: "tool_use";
   id: string;
   name: string;
   input: Record<string, unknown>;
 }
 
-/** Claude Code sends these for screenshots, pasted images and image-returning
+/** the CLI sends these for screenshots, pasted images and image-returning
  * tools. `base64` carries inline bytes; `url` points at a remote image. */
-export interface AnthropicImageBlock {
+export interface ImageBlock {
   type: "image";
   source:
     | { type: "base64"; media_type: string; data: string }
@@ -29,50 +29,50 @@ export interface AnthropicImageBlock {
 
 /** Extended-thinking blocks. They appear in assistant turns that get replayed
  * back to us; there is no OpenAI equivalent, so they're dropped on the way out. */
-export interface AnthropicThinkingBlock {
+export interface ThinkingBlock {
   type: "thinking" | "redacted_thinking";
   thinking?: string;
   signature?: string;
   data?: string;
 }
 
-export interface AnthropicToolResultBlock {
+export interface ToolResultBlock {
   type: "tool_result";
   tool_use_id: string;
-  content: string | Array<AnthropicTextBlock | AnthropicImageBlock>;
+  content: string | Array<TextBlock | ImageBlock>;
   is_error?: boolean;
 }
 
-export type AnthropicContentBlock =
-  | AnthropicTextBlock
-  | AnthropicImageBlock
-  | AnthropicThinkingBlock
-  | AnthropicToolUseBlock
-  | AnthropicToolResultBlock;
+export type ContentBlock =
+  | TextBlock
+  | ImageBlock
+  | ThinkingBlock
+  | ToolUseBlock
+  | ToolResultBlock;
 
-export interface AnthropicMessage {
-  role: AnthropicRole;
-  content: string | AnthropicContentBlock[];
+export interface ChatMessage {
+  role: MessageRole;
+  content: string | ContentBlock[];
 }
 
-export interface AnthropicToolInputSchema {
+export interface ToolInputSchema {
   type: "object";
   properties?: Record<string, unknown>;
   required?: string[];
   [k: string]: unknown;
 }
 
-export interface AnthropicTool {
+export interface ToolDef {
   name: string;
   description?: string;
-  input_schema: AnthropicToolInputSchema;
+  input_schema: ToolInputSchema;
 }
 
-export interface AnthropicMessagesRequest {
+export interface MessagesRequest {
   model: string;
-  messages: AnthropicMessage[];
-  system?: string | AnthropicTextBlock[];
-  tools?: AnthropicTool[];
+  messages: ChatMessage[];
+  system?: string | TextBlock[];
+  tools?: ToolDef[];
   tool_choice?: { type: "auto" | "any" | "tool"; name?: string };
   max_tokens: number;
   temperature?: number;
@@ -81,12 +81,12 @@ export interface AnthropicMessagesRequest {
   stream?: boolean;
 }
 
-export interface AnthropicMessagesResponse {
+export interface MessagesResponse {
   id: string;
   type: "message";
   role: "assistant";
   model: string;
-  content: AnthropicContentBlock[];
+  content: ContentBlock[];
   stop_reason: "end_turn" | "tool_use" | "max_tokens" | "stop_sequence" | null;
   stop_sequence: string | null;
   usage: { input_tokens: number; output_tokens: number };
@@ -97,7 +97,7 @@ export interface AnthropicMessagesResponse {
 export interface OpenAIFunctionDef {
   name: string;
   description?: string;
-  parameters: AnthropicToolInputSchema;
+  parameters: ToolInputSchema;
 }
 
 export interface OpenAITool {
@@ -192,9 +192,9 @@ export interface ProxyConfig {
   openAIKey: string | null;
   openAIModel: string | null;
   openAIBaseURL: string;
-  /** Ceiling applied to max_tokens, or null to pass Claude Code's value through. */
+  /** Ceiling applied to max_tokens, or null to pass the CLI's value through. */
   maxOutputTokens: number | null;
-  anthropicKey: string | null;
-  anthropicBaseURL: string;
+  upstreamKey: string | null;
+  upstreamBaseURL: string;
   port: number;
 }

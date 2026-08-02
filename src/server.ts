@@ -9,7 +9,7 @@ import { clearCatalogCache, getCatalog, modelsResponse, warmCatalog } from "./ca
 import { DEFAULT_PROVIDER, loadProviders } from "./providers.ts";
 import { estimateInputTokens } from "./tokens.ts";
 import { envFilePath, rewriteKey } from "./modelpicker.ts";
-import type { AnthropicMessagesRequest } from "./types.ts";
+import type { MessagesRequest } from "./types.ts";
 
 const cfg = loadConfig();
 
@@ -75,7 +75,7 @@ const server = createServer(async (req, res) => {
     const c = loadConfig();
     sendJSON(res, 200, {
       ok: true,
-      route: c.useOpenAI ? "openai" : "anthropic",
+      route: c.useOpenAI ? "openai" : "upstream",
       openaiModel: c.openAIModel,
       openaiBaseURL: c.openAIBaseURL,
       port: c.port,
@@ -85,7 +85,7 @@ const server = createServer(async (req, res) => {
 
   /* ----- control endpoints for live model switching (oscar --switch) -----
    * These let the user switch the active backend model from another terminal
-   * while the claude CLI is running, without restarting the proxy. They are
+   * while the CLI is running, without restarting the proxy. They are
    * localhost-only (the server binds to localhost) and read/write the .env the
    * proxy already loads per request via loadConfig(). */
   if (path.startsWith("/_oscar/")) {
@@ -188,13 +188,13 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // Token counting. Claude Code uses this to decide when to compact, and in
+  // Token counting. The CLI uses this to decide when to compact, and in
   // OpenAI-routing mode it can't reach the real endpoint (dummy key → 401), so
   // answer it locally. Passthrough mode still forwards to Anthropic below.
   if (method === "POST" && path === "/v1/messages/count_tokens" && cfg.useOpenAI) {
     const body = await readBody(req);
     try {
-      const parsed = JSON.parse(body.toString("utf8")) as AnthropicMessagesRequest;
+      const parsed = JSON.parse(body.toString("utf8")) as MessagesRequest;
       const input_tokens = estimateInputTokens(parsed);
       sendJSON(res, 200, { input_tokens });
       console.log(`[${new Date().toISOString()}] POST /v1/messages/count_tokens → ~${input_tokens}`);
@@ -206,7 +206,7 @@ const server = createServer(async (req, res) => {
   }
 
   /* ----- gateway model discovery: this is what populates /model -----
-   * On startup Claude Code fetches `${ANTHROPIC_BASE_URL}/v1/models?limit=1000`
+   * On startup the CLI fetches `${ANTHROPIC_BASE_URL}/v1/models?limit=1000`
    * and caches the result as extra entries in the /model picker. It requires
    * CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1 and a non-anthropic base URL
    * (the launcher sets both), and it drops every id that doesn't match
@@ -233,7 +233,7 @@ const server = createServer(async (req, res) => {
   const init: RequestInit = { method, headers: toWebHeaders(req.headers) };
   if (body.length) init.body = new Uint8Array(body);
   try {
-    const upstream = await fetch(`${cfg.anthropicBaseURL}${path}`, init);
+    const upstream = await fetch(`${cfg.upstreamBaseURL}${path}`, init);
     writeWebResponse(res, upstream.status, upstream.headers);
     await pumpWebBody(res, upstream.body as ReadableStream<Uint8Array> | Uint8Array | null);
   } catch (err) {
@@ -259,7 +259,7 @@ server.listen(cfg.port, () => {
   }
 
   // Warm the model catalog now, with a budget the request path can't afford.
-  // Claude Code fetches /v1/models exactly once at startup and gives up after
+  // The CLI fetches /v1/models exactly once at startup and gives up after
   // 3s, so a backend that is merely slow to answer its first request would
   // otherwise be missing from /model for the entire session.
   void warmCatalog(cfg)

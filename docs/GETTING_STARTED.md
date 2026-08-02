@@ -32,15 +32,15 @@ it's running. Nothing else to configure.
 
 > Already have OpenAI, DeepSeek, LM Studio or vLLM? Skip this — any of them work.
 
-## Step 3 — Check Claude Code
+## Step 3 — Check the CLI
 
-O.S.C.A.R. drives Claude Code; it doesn't replace it.
+O.S.C.A.R. drives the CLI; it doesn't replace it.
 
 ```bash
 claude --version
 ```
 
-If that fails but you have the Claude desktop app, you're still fine — O.S.C.A.R.
+If that fails but you have the desktop app, you're still fine — O.S.C.A.R.
 finds the copy the desktop app bundles. Otherwise:
 
 ```bash
@@ -122,7 +122,7 @@ If anything is red, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 oscar
 ```
 
-Claude Code starts as normal. Type `/model` and your Ollama models are in the
+The CLI starts as normal. Type `/model` and your Ollama models are in the
 list. Pick one and start working.
 
 To check without entering the UI:
@@ -139,17 +139,17 @@ oscar -p "what files are in this directory?"
 one picker — see [PROVIDERS.md](PROVIDERS.md).
 
 **Cap output tokens.** If a small model truncates or errors, add
-`OSCAR_MAX_OUTPUT_TOKENS=4096` to `~/.oscar/.env`. Claude Code asks for a
+`OSCAR_MAX_OUTPUT_TOKENS=4096` to `~/.oscar/.env`. The CLI asks for a
 200k-context budget by default, which small models can't honour.
 
-**Switch models without restarting.** Use `/model` inside Claude Code, or run
+**Switch models without restarting.** Use `/model` inside the CLI, or run
 `oscar --switch` from a second terminal while it's running.
 
 ---
 
 ## A realistic expectation
 
-A 7B local model is not Claude. It will be slower, will sometimes ignore tool
+A 7B local model is not a frontier model. It will be slower, will sometimes ignore tool
 schemas, and will handle long contexts worse. For quick edits, file questions
 and offline work it's genuinely useful. For complex multi-step refactors, a
 larger hosted model behind O.S.C.A.R. will serve you better.

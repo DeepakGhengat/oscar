@@ -4,7 +4,7 @@
 
 **O**rchestrator for **S**ystem **C**oding & **A**utonomous **R**outing
 
-*Run Claude Code against any model you want — local Ollama, DeepSeek, OpenAI, LM Studio, vLLM — without patching a single line of Claude Code.*
+*Run your coding CLI against any model you want — local Ollama, DeepSeek, OpenAI, LM Studio, vLLM — without patching a single line of it.*
 
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-339933)](https://nodejs.org)
 [![Tests](https://img.shields.io/badge/tests-228%20passing-brightgreen)]()
@@ -16,15 +16,15 @@
 
 ## What it is
 
-Claude Code is an excellent coding agent — the tools, the agent loop, the terminal UI, the permission model. It is also hard-wired to Anthropic's API.
+The CLI is an excellent coding agent — the tools, the agent loop, the terminal UI, the permission model. It is also hard-wired to Anthropic's API.
 
-O.S.C.A.R. is a **local translation proxy** that sits in between. Claude Code thinks it is talking to `api.anthropic.com`; O.S.C.A.R. converts every request into OpenAI Chat Completions format and forwards it to whatever backend you actually want.
+O.S.C.A.R. is a **local translation proxy** that sits in between. The CLI thinks it is talking to `api.anthropic.com`; O.S.C.A.R. converts every request into OpenAI Chat Completions format and forwards it to whatever backend you actually want.
 
-You keep the entire Claude Code experience. You change only which model answers.
+You keep the entire CLI experience. You change only which model answers.
 
 ```
-  Claude Code                O.S.C.A.R. (localhost:8787)          your backend
-  ───────────                ───────────────────────────          ────────────
+  the CLI                    O.S.C.A.R. (localhost:8787)      your backend
+  ───────                    ───────────────────────────      ────────────
   ANTHROPIC_BASE_URL ──────► GET  /v1/models      ───────────────► GET  /models
   ANTHROPIC_API_KEY=dummy    POST /v1/messages    ──translate────► POST /chat/completions
                              POST /v1/messages/count_tokens
@@ -34,9 +34,9 @@ You keep the entire Claude Code experience. You change only which model answers.
 
 ## Why it exists
 
-Most "use Claude Code with another model" setups give you a working proxy and a broken `/model` command — you edit a config file and restart to change models.
+Most "use the CLI with another model" setups give you a working proxy and a broken `/model` command — you edit a config file and restart to change models.
 
-O.S.C.A.R. makes `/model` work. Every model on every configured backend shows up in Claude Code's own picker, switchable mid-session:
+O.S.C.A.R. makes `/model` work. Every model on every configured backend shows up in the CLI's own picker, switchable mid-session:
 
 ```
   qwen2.5:7b           (local)
@@ -50,13 +50,13 @@ O.S.C.A.R. makes `/model` work. Every model on every configured backend shows up
 
 | | |
 |---|---|
-| **Native `/model` picker** | Every backend model appears in Claude Code's own model list |
+| **Native `/model` picker** | Every backend model appears in the CLI's own model list |
 | **Multiple backends at once** | Local Ollama *and* DeepSeek *and* OpenAI in one picker, each with its own key |
 | **Full tool-call translation** | `tool_use` / `tool_result` round-trip correctly, so the agent loop works |
 | **Streaming** | OpenAI SSE → Anthropic event stream, token by token |
 | **Vision** | Screenshots and pasted images translate to `image_url` parts |
 | **Reasoning models** | Surfaces chain-of-thought when `content` comes back empty, so no blank replies |
-| **Local token counting** | Claude Code keeps accurate context accounting |
+| **Local token counting** | the CLI keeps accurate context accounting |
 | **Per-model token ceilings** | Cap a small local model without touching the others |
 | **Health checks** | `oscar --doctor` proves the setup works with a real completion |
 | **Passthrough mode** | Flip one flag and every request goes to the real Anthropic API, untouched |
@@ -66,7 +66,7 @@ O.S.C.A.R. makes `/model` work. Every model on every configured backend shows up
 ## Requirements
 
 - **Node.js ≥ 18** — `node --version`
-- **Claude Code** — the desktop app's bundled copy is found automatically, or `npm i -g @anthropic-ai/claude-code`
+- **The CLI** — the desktop app's bundled copy is found automatically, or `npm i -g @anthropic-ai/claude-code`
 - **A backend** — [Ollama](https://ollama.com) is the easiest; anything OpenAI-compatible works
 
 ## Installation
@@ -128,7 +128,7 @@ Run it:
 oscar
 ```
 
-Any extra arguments pass straight through to Claude Code:
+Any extra arguments pass straight through to the CLI:
 
 ```bash
 oscar -p "explain the architecture of this repo"
@@ -140,7 +140,7 @@ oscar -p "explain the architecture of this repo"
 
 | Command | What it does |
 |---|---|
-| `oscar` | Start the proxy and launch Claude Code against it |
+| `oscar` | Start the proxy and launch the CLI against it |
 | `oscar --setup` | Interactive wizard; writes `~/.oscar/.env` |
 | `oscar --doctor` | Check every backend, ending with a live completion. Exits non-zero on failure |
 | `oscar --model` | Pick a model and write it to `.env` |
@@ -156,7 +156,7 @@ oscar -p "explain the architecture of this repo"
 | `OPENAI_BASE_URL` | Backend base URL | `https://api.openai.com/v1` |
 | `OPENAI_API_KEY` | Backend key | required when routing |
 | `OPENAI_MODEL` | Default model | required when routing |
-| `OSCAR_MAX_OUTPUT_TOKENS` | Clamp on `max_tokens` — Claude Code asks for a 200k-context budget | unset (no clamp) |
+| `OSCAR_MAX_OUTPUT_TOKENS` | Clamp on `max_tokens` — the CLI asks for a 200k-context budget | unset (no clamp) |
 | `PROXY_PORT` | Port the proxy listens on | `8787` |
 | `ANTHROPIC_API_KEY` | Used only in passthrough mode | — |
 
@@ -214,14 +214,14 @@ Without a `providers.json`, the flat `.env` is used as a single provider — not
 5. Set `ANTHROPIC_API_KEY` to a dummy value — the proxy ignores it and uses your backend key
 6. Set `CLAUDE_CONFIG_DIR` to a throwaway profile, so a stale OAuth token can't override the dummy key
 7. Set `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`
-8. Launch Claude Code
+8. Launch the CLI
 9. Tear the proxy down on exit
 
 Meanwhile the proxy **warms its model catalog**, because the next step has a hard deadline.
 
 ### 2. Model discovery — the interesting part
 
-Claude Code fetches `{ANTHROPIC_BASE_URL}/v1/models?limit=1000` **exactly once** at startup, gives up after 3 seconds, and folds the result into its `/model` picker.
+The CLI fetches `{ANTHROPIC_BASE_URL}/v1/models?limit=1000` **exactly once** at startup, gives up after 3 seconds, and folds the result into its `/model` picker.
 
 Then it applies this filter to the ids it got back:
 
@@ -240,7 +240,7 @@ Because that fetch happens *once*, a backend that is merely slow on its first re
 
 ### 3. Each message
 
-You pick a model; Claude Code sends its alias as `body.model`. The proxy:
+You pick a model; the CLI sends its alias as `body.model`. The proxy:
 
 1. Maps the alias back to a **provider + real model name**
 2. Translates Anthropic → OpenAI: system prompt, message history, tool definitions (`input_schema` → `function.parameters`), `tool_use` / `tool_result` blocks, images as data URIs
@@ -248,7 +248,7 @@ You pick a model; Claude Code sends its alias as `body.model`. The proxy:
 4. POSTs to **that provider's** URL with **that provider's** key
 5. Translates the response back, including SSE → Anthropic's `message_start` → `content_block_delta` → `message_stop` sequence
 
-Token counting is answered locally, because forwarding it with the dummy key would 401 and cost Claude Code its context accounting.
+Token counting is answered locally, because forwarding it with the dummy key would 401 and cost the CLI its context accounting.
 
 ### Architecture
 
@@ -290,7 +290,7 @@ So any setup flow that validates by listing models will happily accept a placeho
 Failed to authenticate. API Error: 401 {"error":"Unauthorized"}
 ```
 
-— which reads as *Claude Code's* login expiring, sending you to debug entirely the wrong thing.
+— which reads as *the CLI's* login expiring, sending you to debug entirely the wrong thing.
 
 O.S.C.A.R. handles this in three places: the wizard sends a real completion before writing config, `--doctor` does the same on demand, and the proxy wraps upstream 401s so the message names your backend and the responsible provider.
 
@@ -302,7 +302,7 @@ O.S.C.A.R. handles this in three places: the wizard sends a real completion befo
 
 **401 mid-conversation** — your backend rejected its key. `oscar --doctor` will name which provider and why.
 
-**Model works in `--doctor` but not in Claude Code** — the model name in `.env` may not match what the backend serves. Ollama's local naming (`glm-5.2:cloud`) differs from the cloud API's (`glm-5.2`). `--doctor` reports the closest match.
+**Model works in `--doctor` but not in the CLI** — the model name in `.env` may not match what the backend serves. Ollama's local naming (`glm-5.2:cloud`) differs from the cloud API's (`glm-5.2`). `--doctor` reports the closest match.
 
 **Blank replies from a reasoning model** — its token budget is being consumed by reasoning. Raise `max_tokens`, or set `OSCAR_MAX_OUTPUT_TOKENS` higher.
 
@@ -324,7 +324,7 @@ npm run typecheck
 
 228 tests, entirely offline. Unit tests cover translation and config; `catalog-probe` stubs `fetch`; `proxy-routing` and `integration` run in-process mock backends; `server.test.ts` spawns the real proxy and drives every route over HTTP.
 
-Run just the proxy, without Claude Code:
+Run just the proxy, without the CLI:
 
 ```bash
 npm start
@@ -334,10 +334,10 @@ npm start
 
 Tested against Ollama (local and cloud). Anything exposing OpenAI-compatible `/models` and `/chat/completions` should work: OpenAI, DeepSeek, LM Studio, vLLM, llama.cpp, LiteLLM, OpenRouter, Together, Groq.
 
-Verified with Claude Code **2.1.219**. Model discovery relies on Claude Code's gateway-discovery behaviour, which is version-dependent — if a future release changes it, `/model` may stop listing backend models while everything else keeps working.
+Verified with the CLI **2.1.219**. Model discovery relies on the CLI's gateway-discovery behaviour, which is version-dependent — if a future release changes it, `/model` may stop listing backend models while everything else keeps working.
 
 ## Licence
 
 MIT — see [LICENSE.md](LICENSE.md).
 
-O.S.C.A.R. is not affiliated with or endorsed by Anthropic. Claude Code is Anthropic's software, used here unmodified.
+O.S.C.A.R. is an independent project, not affiliated with or endorsed by Anthropic. The CLI it drives is Anthropic's software, used here unmodified.

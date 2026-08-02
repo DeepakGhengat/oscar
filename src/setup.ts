@@ -28,7 +28,7 @@ export interface SetupConfig {
   openAIKey: string | null;
   openAIModel: string | null;
   openAIBaseURL: string | null;
-  anthropicKey: string | null;
+  upstreamKey: string | null;
   port: number;
 }
 
@@ -43,8 +43,8 @@ export function formatEnv(cfg: SetupConfig): string {
     lines.push(`OPENAI_MODEL=${cfg.openAIModel ?? ""}`);
     lines.push(`OPENAI_BASE_URL=${cfg.openAIBaseURL ?? ""}`);
   }
-  if (cfg.anthropicKey) {
-    lines.push(`ANTHROPIC_API_KEY=${cfg.anthropicKey}`);
+  if (cfg.upstreamKey) {
+    lines.push(`ANTHROPIC_API_KEY=${cfg.upstreamKey}`);
   }
   return lines.join("\n") + "\n";
 }
@@ -127,10 +127,10 @@ export async function main(): Promise<void> {
   let openAIKey: string | null = null;
   let openAIModel: string | null = null;
   let openAIBaseURL: string | null = null;
-  let anthropicKey: string | null = null;
+  let upstreamKey: string | null = null;
 
   if (preset.kind === "passthrough") {
-    anthropicKey = await askRequired(rl, "Anthropic API key");
+    upstreamKey = await askRequired(rl, "Anthropic API key");
   } else {
     useOpenAI = true;
     openAIBaseURL = preset.baseURL
@@ -183,11 +183,11 @@ export async function main(): Promise<void> {
     }
   }
 
-  const cfg: SetupConfig = { useOpenAI, openAIKey, openAIModel, openAIBaseURL, anthropicKey, port };
+  const cfg: SetupConfig = { useOpenAI, openAIKey, openAIModel, openAIBaseURL, upstreamKey, port };
 
   const summary = useOpenAI
     ? `provider:  ${preset.label}\nbase URL:  ${openAIBaseURL}\nmodel:     ${openAIModel}\nkey:       ${openAIKey ? openAIKey.slice(0, 4) + "..." : "(none)"}\nport:      ${port}`
-    : `provider:      ${preset.label}\nanthropic key: ${anthropicKey ? anthropicKey.slice(0, 4) + "..." : "(none)"}\nport:          ${port}`;
+    : `provider:      ${preset.label}\nanthropic key: ${upstreamKey ? upstreamKey.slice(0, 4) + "..." : "(none)"}\nport:          ${port}`;
   console.log(`\n${box(summary)}\n`);
 
   const write = (await ask(rl, "Write .env?", "Y")).toLowerCase();

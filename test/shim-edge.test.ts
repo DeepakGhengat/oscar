@@ -12,11 +12,11 @@ import {
 } from "../src/openaiShim.ts";
 import { estimateInputTokens } from "../src/tokens.ts";
 import type {
-  AnthropicMessagesRequest,
+  MessagesRequest,
   OpenAIChatCompletionResponse,
 } from "../src/types.ts";
 
-const base: AnthropicMessagesRequest = {
+const base: MessagesRequest = {
   model: "claude-sonnet-4-5",
   max_tokens: 100,
   messages: [{ role: "user", content: "hi" }],
@@ -115,7 +115,7 @@ test("content_filter and null finish_reason degrade to end_turn", () => {
 });
 
 test("the response echoes the model the caller asked for", () => {
-  // Claude Code matches this against what it requested.
+  // The CLI matches this against what it requested.
   assert.equal(translateOpenAIResponse(response(), "claude-oscar-glm-5.2-cloud").model, "claude-oscar-glm-5.2-cloud");
 });
 
@@ -247,7 +247,7 @@ test("estimator grows monotonically with content", () => {
 });
 
 test("estimator errs high rather than low", () => {
-  // Undercounting makes Claude Code compact too late and blow the context.
+  // Undercounting makes the CLI compact too late and blow the context.
   const chars = 4000;
   const n = estimateInputTokens({ ...base, messages: [{ role: "user", content: "a".repeat(chars) }] });
   assert.ok(n >= chars / 4, `${n} tokens for ${chars} chars is an undercount`);

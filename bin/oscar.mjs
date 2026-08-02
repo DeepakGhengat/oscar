@@ -10,7 +10,7 @@
 //   5. Start the proxy (src/server.ts via tsx) as a child process
 //   6. Wait for /healthz
 //   7. Set ANTHROPIC_BASE_URL + dummy key + clean CLAUDE_CONFIG_DIR
-//   8. Launch the claude CLI, forwarding remaining args
+//   8. Launch the coding CLI, forwarding remaining args
 //   9. Tear down the proxy on exit
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
@@ -22,6 +22,10 @@ import { spawn } from "node:child_process";
 const __filename = fileURLToPath(import.meta.url);
 // Package root: bin/ -> ../  (where src/ and node_modules/ live)
 const PKG_ROOT = resolve(dirname(__filename), "..");
+
+// Placeholder credential handed to the CLI. The proxy ignores it and
+// authenticates to the backend with the provider's own key.
+const DUMMY_KEY = "oscar-dummy-key";
 
 /* --------------------------- config location ----------------------------- */
 
@@ -94,10 +98,13 @@ export function newestVersioned(root, exe) {
   return best ? { path: join(root, best, exe), version: best } : null;
 }
 
-/** Locate the claude CLI. The Claude desktop app ships its own versioned
- * copy and never puts it on PATH, so check that before giving up — otherwise
- * a desktop-only install fails to launch with a bare ENOENT. */
-function findClaudeBin() {
+/** Locate the coding CLI. The desktop app ships its own versioned copy and
+ * never puts it on PATH, so check that before giving up — otherwise a
+ * desktop-only install fails to launch with a bare ENOENT.
+ *
+ * The executable name and the desktop app's install directories below are
+ * fixed by the CLI's own installer, not chosen by us. */
+function findCliBin() {
   const exe = process.platform === "win32" ? "claude.exe" : "claude";
 
   const sdkBin = join(PKG_ROOT, "sdk", "bin", exe);
@@ -206,8 +213,8 @@ async function main() {
   }
 
   // --switch: talk to a *running* proxy's /_oscar/ control endpoints and
-  // hot-swap the backend model live, without restarting claude. Use from a
-  // second terminal while claude is running in the first.
+  // hot-swap the backend model live, without restarting the CLI. Use from a
+  // second terminal while the CLI is running in the first.
   if (args.includes("--switch")) {
     const dir = configDir();
     if (process.env.OSCAR_CONFIG === undefined) {
@@ -282,62 +289,63 @@ async function main() {
   }
   console.log(`Proxy healthy on port ${port}.`);
 
-  // 3. Point the claude CLI at the proxy.
+  // 3. Point the CLI at the proxy.
   process.env.ANTHROPIC_BASE_URL = `http://localhost:${port}`;
-  process.env.ANTHROPIC_REAL_BASE_URL = "https://api.anthropic.com";
+  process.env.OSCAR_UPSTREAM_BASE_URL = "https://api.anthropic.com";
   if (isTruthy(process.env.USE_OPENAI_API)) {
-    process.env.ANTHROPIC_API_KEY = "oscar-dummy-key";
-    // Make the backend's models show up in /model. Claude Code only performs
+    process.env.ANTHROPIC_API_KEY = DUMMY_KEY;
+    // Make the backend's models show up in /model. The CLI only performs
     // gateway model discovery (GET $ANTHROPIC_BASE_URL/v1/models) when this is
     // set; the other preconditions — first-party provider and a base URL that
-    // isn't api.anthropic.com — already hold here.
+    // isn't api.anthropic.com — already hold here. The variable name is the
+    // CLI's, not ours.
     process.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1";
     // Bypass stored expired OAuth credentials so the env-var key is used.
-    const cleanConfig = join(homedir(), ".oscar", "claude-config");
+    const cleanConfig = join(homedir(), ".oscar", "cli-profile");
     mkdirSync(cleanConfig, { recursive: true });
     process.env.CLAUDE_CONFIG_DIR = cleanConfig;
-    // claude persists API-key rejections into .claude.json's
+    // The CLI persists API-key rejections into its state file, under
     // customApiKeyResponses.rejected[]. If a prior run rejected the dummy
-    // key, claude shows the login page instead of using the env var. Wipe
-    // any rejected entries for our dummy key so each launch starts clean.
-    const claudeJson = join(cleanConfig, ".claude.json");
-    if (existsSync(claudeJson)) {
+    // key, it shows the login page instead of using the env var. Wipe any
+    // rejected entries for our dummy key so each launch starts clean.
+    const cliState = join(cleanConfig, ".claude.json");
+    if (existsSync(cliState)) {
       try {
-        const raw = readFileSync(claudeJson, "utf8");
+        const raw = readFileSync(cliState, "utf8");
         const data = JSON.parse(raw);
         let changed = false;
         if (data.customApiKeyResponses && Array.isArray(data.customApiKeyResponses.rejected)) {
           const filtered = data.customApiKeyResponses.rejected.filter(
-            (k) => k !== "oscar-dummy-key" && k !== "-code-free-dummy-key",
+            (k) => k !== DUMMY_KEY,
           );
           if (filtered.length !== data.customApiKeyResponses.rejected.length) {
             data.customApiKeyResponses.rejected = filtered;
             changed = true;
           }
         }
-        if (changed) writeFileSync(claudeJson, JSON.stringify(data, null, 2));
+        if (changed) writeFileSync(cliState, JSON.stringify(data, null, 2));
       } catch {
-        // corrupt or unreadable — let claude recreate it
+        // corrupt or unreadable — let the CLI recreate it
       }
     }
   }
 
-  // 4. Launch claude, forwarding args (minus any --setup we already handled).
-  const claudeArgs = args.filter((a) => a !== "--setup" && a !== "--switch" && a !== "--doctor");
-  const claudeBin = findClaudeBin();
+  // 4. Launch the CLI, forwarding args (minus any --setup we already handled).
+  const cliArgs = args.filter((a) => a !== "--setup" && a !== "--switch" && a !== "--doctor");
+  const cliBin = findCliBin();
   console.log(
-    `Launching: ${claudeBin.path}${claudeBin.version ? ` (claude-code ${claudeBin.version})` : ""}`,
+    `Launching: ${cliBin.path}${cliBin.version ? ` (v${cliBin.version})` : ""}`,
   );
-  const claude = spawn(claudeBin.path, claudeArgs, { stdio: "inherit", env: process.env });
-  claude.on("error", (err) => {
+  const cli = spawn(cliBin.path, cliArgs, { stdio: "inherit", env: process.env });
+  cli.on("error", (err) => {
     console.error(
-      `Could not launch the claude CLI (${claudeBin.path}): ${err.message}\n` +
+      `Could not launch the CLI (${cliBin.path}): ${err.message}\n` +
       `Install it with: npm i -g @anthropic-ai/claude-code`,
     );
     killProxy();
     process.exit(1);
   });
-  claude.on("exit", (code) => {
+  cli.on("exit", (code) => {
     killProxy();
     process.exit(code ?? 0);
   });
@@ -373,7 +381,7 @@ export function isCliEntry(argv1, self) {
   return real(argv1) === real(self);
 }
 
-// Importing this file (e.g. from tests) must not start a proxy or spawn claude.
+// Importing this file (e.g. from tests) must not start a proxy or spawn the CLI.
 if (isCliEntry(process.argv[1], __filename)) {
   main().catch((err) => {
     console.error(err);

@@ -1,19 +1,19 @@
 ---
 name: oscar
-description: Route Anthropic Claude Code requests to any OpenAI-compatible backend via a local translation proxy.
+description: Route Anthropic the CLI requests to any OpenAI-compatible backend via a local translation proxy.
 ---
 
 # O.S.C.A.R.
 
 A local proxy that translates Anthropic Messages API requests (`/v1/messages`)
-into OpenAI Chat Completions requests (`/v1/chat/completions`) so the Claude Code
+into OpenAI Chat Completions requests (`/v1/chat/completions`) so the coding
 CLI can drive any OpenAI-compatible backend — OpenAI, DeepSeek, Ollama, LM
 Studio, vLLM, etc.
 
 ## When to use
 
-- You want to run the Claude Code CLI against a non-Anthropic model.
-- You have an OpenAI-compatible endpoint and want Claude Code's agent loop on top of it.
+- You want to run the CLI against a non-Anthropic model.
+- You have an OpenAI-compatible endpoint and want the CLI's agent loop on top of it.
 - You want passthrough to real Anthropic as a fallback.
 
 ## Setup
@@ -35,7 +35,7 @@ npx tsx src/setup.ts
 If `.env` is missing, `bash scripts/run.sh` runs the wizard automatically before
 launching the CLI.
 
-Then install Node deps and the Claude SDK (one-time):
+Then install Node deps and the CLI (one-time):
 
 ```bash
 npm install
@@ -63,7 +63,7 @@ Anthropic endpoint (passthrough mode) — no translation.
 bash scripts/run.sh
 ```
 
-This starts the proxy and launches the bundled `claude` CLI pointed at it
+This starts the proxy and launches the bundled CLI pointed at it
 (`ANTHROPIC_BASE_URL=http://localhost:$PORT`).
 
 ## What it translates

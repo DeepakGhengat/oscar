@@ -84,8 +84,8 @@ function cfg(over: Partial<ProxyConfig> = {}): ProxyConfig {
     openAIModel: "qwen2.5:7b",
     openAIBaseURL: "http://localhost:11434/v1",
     maxOutputTokens: null,
-    anthropicKey: null,
-    anthropicBaseURL: "https://api.anthropic.com",
+    upstreamKey: null,
+    upstreamBaseURL: "https://api.anthropic.com",
     port: 8787,
     ...over,
   };
@@ -201,8 +201,8 @@ test("embedding models are filtered out of the probe result", async () => {
 
 /* --------------------------- probe budgets -------------------------------- */
 
-test("the request path probes within Claude Code's 3s discovery timeout", async () => {
-  // Claude Code aborts its /v1/models fetch after 3s; anything longer means an
+test("the request path probes within the CLI's 3s discovery timeout", async () => {
+  // The CLI aborts its /v1/models fetch after 3s; anything longer means an
   // empty picker for the whole session.
   assert.ok(
     PROBE_TIMEOUT_REQUEST_MS < 3000,
@@ -226,7 +226,7 @@ test("warmCatalog fills the cache so the first request is served from it", async
 
 test("a partial result is retried sooner than a complete one", async () => {
   // Regression: a slow backend dropped out of a cached catalog for a full 60s,
-  // and Claude Code only fetches the picker once — so it stayed missing.
+  // and the CLI only fetches the picker once — so it stayed missing.
   process.env.OSCAR_CONFIG = providerDir;
   let cloudUp = false;
   stubFetch((url) => {
