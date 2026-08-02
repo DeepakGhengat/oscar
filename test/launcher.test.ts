@@ -1,5 +1,5 @@
 // Pure helpers inside bin/oscar.mjs. Importing the launcher must
-// not start a proxy or spawn claude — the CLI entry point is guarded, and the
+// not start a proxy or spawn the CLI — the CLI entry point is guarded, and the
 // first test here is what proves that guard works.
 
 import { test } from "node:test";

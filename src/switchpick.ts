@@ -1,7 +1,7 @@
 // `oscar --switch`: talk to a *running* proxy's /_oscar/ control
 // endpoints and hot-swap the backend model live, without restarting it.
 //
-// Use this from a second terminal while `claude` is running in the first.
+// Use this from a second terminal while the CLI is running in the first.
 // The proxy must already be up (the launcher starts it). This command reads
 // the proxy port from the .env, probes /_oscar/models, shows a two-step picker
 // (series -> model in series) plus "all models" and "set up" options, and
@@ -165,7 +165,7 @@ export async function runSwitchPicker(): Promise<string | null> {
   // and the proxy reloads .env lazily; safer to point them at the command).
   if (idx === seriesOptions.length - 1) {
     closeRl(rl);
-    console.log(`\nRun ${c.bold}oscar --setup${c.reset} to reconfigure the backend, then restart claude.`);
+    console.log(`\nRun ${c.bold}oscar --setup${c.reset} to reconfigure the backend, then restart the CLI.`);
     return null;
   }
 

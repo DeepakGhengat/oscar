@@ -86,7 +86,7 @@ If `providers.json` is unparseable, O.S.C.A.R. falls back to the flat `.env`.
 
 ## Token ceilings
 
-Claude Code sizes `max_tokens` for a 200k-context Claude model. Smaller
+The CLI sizes `max_tokens` for a 200k-context frontier model. Smaller
 backends either reject that outright or silently truncate mid-answer.
 
 Ceilings resolve most-specific-first:
@@ -141,7 +141,7 @@ Putting the local-style name in a cloud config produces a confusing failure.
 
 | Method | Scope | Restart? |
 |---|---|---|
-| `/model` inside Claude Code | that session | no |
+| `/model` inside the CLI | that session | no |
 | `oscar --switch` | the running proxy, from another terminal | no |
 | `oscar --model` | rewrites `.env` | yes |
 

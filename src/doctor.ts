@@ -3,7 +3,7 @@
 // Exists because the failure this catches is nearly undiagnosable from the
 // symptom: a placeholder API key passes the wizard's /models probe (listing is
 // public on Ollama Cloud) and then surfaces mid-conversation as a 401 that
-// looks like Claude Code's own login expiring.
+// looks like the CLI's own login expiring.
 
 import { existsSync, readFileSync } from "node:fs";
 import { c } from "./ui.ts";
@@ -62,8 +62,8 @@ export async function runDoctor(): Promise<boolean> {
     openAIModel: defaultModel || null,
     openAIBaseURL: (env.OPENAI_BASE_URL ?? "").replace(/\/$/, ""),
     maxOutputTokens: null,
-    anthropicKey: null,
-    anthropicBaseURL: "https://api.anthropic.com",
+    upstreamKey: null,
+    upstreamBaseURL: "https://api.anthropic.com",
     port: Number(env.PROXY_PORT ?? 8787),
   });
   for (const e of errors) {

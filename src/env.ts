@@ -9,7 +9,7 @@ function truthy(v: string | undefined): boolean {
   return v !== undefined && TRUTHY.has(v.trim().toLowerCase());
 }
 
-const ANTHROPIC_DEFAULT = "https://api.anthropic.com";
+const UPSTREAM_DEFAULT = "https://api.anthropic.com";
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
 
 /** True when `url` is this proxy — i.e. forwarding to it would loop. */
@@ -26,7 +26,7 @@ export function pointsAtSelf(url: string, port: number): boolean {
 }
 
 /** First candidate that isn't us, else the real Anthropic endpoint. */
-export function resolveAnthropicBaseURL(
+export function resolveUpstreamBaseURL(
   candidates: Array<string | undefined>,
   port: number,
 ): string {
@@ -36,7 +36,7 @@ export function resolveAnthropicBaseURL(
     if (pointsAtSelf(url, port)) continue;
     return url;
   }
-  return ANTHROPIC_DEFAULT;
+  return UPSTREAM_DEFAULT;
 }
 
 /** Reads + validates the environment flags. Called per-request so test/runtime
@@ -48,19 +48,19 @@ export function loadConfig(): ProxyConfig {
   const openAIModel = process.env.OPENAI_MODEL ?? null;
   const openAIBaseURL = (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/$/, "");
 
-  const anthropicKey = process.env.ANTHROPIC_API_KEY ?? null;
+  const upstreamKey = process.env.ANTHROPIC_API_KEY ?? null;
   const port = Number(process.env.PROXY_PORT ?? 8787);
 
-  // ANTHROPIC_BASE_URL points at *this proxy* while claude is running. If it
+  // ANTHROPIC_BASE_URL points at *this proxy* while the CLI is running. If it
   // leaks into the proxy's own environment (a stale .env entry, an exported
   // shell var) passthrough would forward to ourselves and spin. Prefer the
   // explicit REAL url, and refuse any candidate that resolves back to us.
-  const anthropicBaseURL = resolveAnthropicBaseURL(
-    [process.env.ANTHROPIC_REAL_BASE_URL, process.env.ANTHROPIC_BASE_URL],
+  const upstreamBaseURL = resolveUpstreamBaseURL(
+    [process.env.OSCAR_UPSTREAM_BASE_URL, process.env.ANTHROPIC_BASE_URL],
     port,
   );
 
-  // Claude Code sizes max_tokens for a 200k-context Claude model. Backends
+  // The CLI sizes max_tokens for a 200k-context frontier model. Backends
   // with a smaller ceiling reject the request or truncate mid-answer, so allow
   // an explicit cap. Unset (or non-positive) means "don't clamp".
   const rawCap = Number(process.env.OSCAR_MAX_OUTPUT_TOKENS ?? "");
@@ -77,8 +77,8 @@ export function loadConfig(): ProxyConfig {
     openAIModel,
     openAIBaseURL,
     maxOutputTokens,
-    anthropicKey,
-    anthropicBaseURL,
+    upstreamKey,
+    upstreamBaseURL,
     port,
   };
 }

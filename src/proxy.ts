@@ -4,7 +4,7 @@
 import { buildOpenAIRequest, translateOpenAIResponse } from "./openaiShim.ts";
 import { StreamTranslator } from "./stream.ts";
 import type {
-  AnthropicMessagesRequest,
+  MessagesRequest,
   OpenAIChatCompletionResponse,
   OpenAIStreamChunk,
   ProxyConfig,
@@ -18,7 +18,7 @@ import {
   type Provider,
 } from "./providers.ts";
 
-const ANTHROPIC_VERSION = "2023-06-01";
+const MESSAGES_API_VERSION = "2023-06-01";
 
 /** Where a request is actually going: which backend, under which name. */
 interface Target {
@@ -29,7 +29,7 @@ interface Target {
 
 /** Resolve the upstream target.
  *
- * When the user picks a backend model from `/model`, Claude Code sends the id
+ * When the user picks a backend model from `/model`, the CLI sends the id
  * we advertised through gateway discovery (a `claude-oscar-…` alias) as
  * `body.model`. Map that back to the real provider + model. Anything else —
  * the usual case, where the body carries an Anthropic tier id — falls back to
@@ -61,10 +61,10 @@ async function resolveTarget(
   };
 }
 
-function anthropicAuthHeaders(cfg: ProxyConfig): Record<string, string> {
+function upstreamAuthHeaders(cfg: ProxyConfig): Record<string, string> {
   return {
-    "x-api-key": cfg.anthropicKey ?? "",
-    "anthropic-version": ANTHROPIC_VERSION,
+    "x-api-key": cfg.upstreamKey ?? "",
+    "anthropic-version": MESSAGES_API_VERSION,
     "anthropic-dangerous-direct-browser-access": "true",
   };
 }
@@ -72,7 +72,7 @@ function anthropicAuthHeaders(cfg: ProxyConfig): Record<string, string> {
 /* --------------------------- OpenAI routing ------------------------------- */
 
 async function callOpenAI(
-  body: AnthropicMessagesRequest,
+  body: MessagesRequest,
   target: Target,
 ): Promise<Response> {
   const { provider } = target;
@@ -91,7 +91,7 @@ async function callOpenAI(
   if (!upstream.ok) {
     // Wrap the upstream error in Anthropic's envelope so the CLI renders our
     // message instead of a bare `API Error: 401 {"error":"Unauthorized"}` —
-    // which reads as *Claude Code's* login failing rather than the backend
+    // which reads as *the CLI's* login failing rather than the backend
     // refusing its key. The original body is preserved inside.
     const text = await upstream.text();
     const auth = upstream.status === 401 || upstream.status === 403;
@@ -99,13 +99,13 @@ async function callOpenAI(
     if (auth) {
       console.error(
         `[error] ${who} rejected the API key (${upstream.status}). ` +
-          `This is your backend key, not Claude Code's login. ` +
+          `This is your backend key, not the CLI's login. ` +
           `Run 'oscar --doctor' to check the config.`,
       );
     }
     const message = auth
       ? `Your backend rejected the request (${upstream.status}). ${who} refused the API key — ` +
-        `this is not a Claude Code login problem. Run 'oscar --doctor' to check the config. ` +
+        `this is not a the CLI login problem. Run 'oscar --doctor' to check the config. ` +
         `Upstream said: ${text.slice(0, 300)}`
       : `Backend ${who} returned ${upstream.status}: ${text.slice(0, 300)}`;
 
@@ -202,14 +202,14 @@ function streamFromOpenAI(upstream: Response, model: string): Response {
 
 /* --------------------------- Anthropic passthrough ------------------------ */
 
-async function passthroughAnthropic(
+async function passthroughUpstream(
   cfg: ProxyConfig,
   path: string,
   method: string,
   headers: Headers,
   body: Uint8Array | string | undefined,
 ): Promise<Response> {
-  const url = `${cfg.anthropicBaseURL}${path}`;
+  const url = `${cfg.upstreamBaseURL}${path}`;
   const outHeaders = new Headers();
   for (const [k, v] of headers.entries()) {
     const lk = k.toLowerCase();
@@ -217,7 +217,7 @@ async function passthroughAnthropic(
     outHeaders.set(k, v);
   }
   // Ensure auth headers are correct even if the CLI omitted them.
-  for (const [k, v] of Object.entries(anthropicAuthHeaders(cfg))) outHeaders.set(k, v);
+  for (const [k, v] of Object.entries(upstreamAuthHeaders(cfg))) outHeaders.set(k, v);
   if (!outHeaders.has("content-type")) outHeaders.set("content-type", "application/json");
 
   const init: RequestInit = { method, headers: outHeaders };
@@ -237,7 +237,7 @@ async function passthroughAnthropic(
 
 export interface RouteResult {
   response: Response;
-  route: "openai" | "anthropic" | "passthrough";
+  route: "openai" | "upstream" | "passthrough";
   incomingModel?: string;
   upstreamModel?: string;
   /** Which configured backend served it — for the request log. */
@@ -249,7 +249,7 @@ export async function routeMessageRequest(
   headers: Headers,
 ): Promise<RouteResult> {
   const cfg = loadConfig();
-  const parsed = body ? (JSON.parse(typeof body === "string" ? body : new TextDecoder().decode(body)) as AnthropicMessagesRequest) : undefined;
+  const parsed = body ? (JSON.parse(typeof body === "string" ? body : new TextDecoder().decode(body)) as MessagesRequest) : undefined;
 
   if (cfg.useOpenAI && parsed) {
     const target = await resolveTarget(cfg, parsed.model);
@@ -263,10 +263,10 @@ export async function routeMessageRequest(
     };
   }
   // Passthrough: keep native Anthropic behaviour intact.
-  const response = await passthroughAnthropic(cfg, "/v1/messages", "POST", headers, body);
+  const response = await passthroughUpstream(cfg, "/v1/messages", "POST", headers, body);
   return {
     response,
-    route: "anthropic",
+    route: "upstream",
     incomingModel: parsed?.model,
     upstreamModel: parsed?.model,
   };

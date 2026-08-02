@@ -77,7 +77,7 @@ the real key and may override the model.
 
 `loadEnvFile(path?: string): void`
 
-- Reads `CLAUDE_CODE_FREE/.env` if present.
+- Reads `OSCAR_CONFIG/.env` if present.
 - Parses `KEY=VALUE` lines; skips blanks and `#` comments; strips surrounding quotes.
 - Sets `process.env` **only for keys not already set** (explicit env wins over file — keeps
   tests deterministic).

@@ -2,27 +2,27 @@
 // and OpenAI Chat Completions shapes. Pure functions, no I/O — easy to unit test.
 
 import type {
-  AnthropicContentBlock,
-  AnthropicMessage,
-  AnthropicMessagesRequest,
-  AnthropicTool,
-  AnthropicToolResultBlock,
-  AnthropicToolUseBlock,
-  AnthropicTextBlock,
-  AnthropicImageBlock,
+  ContentBlock,
+  ChatMessage,
+  MessagesRequest,
+  ToolDef,
+  ToolResultBlock,
+  ToolUseBlock,
+  TextBlock,
+  ImageBlock,
   OpenAIChatCompletionRequest,
   OpenAIChatMessage,
   OpenAIContentPart,
   OpenAITool,
   OpenAIToolCall,
   OpenAIChatCompletionResponse,
-  AnthropicMessagesResponse,
+  MessagesResponse,
 } from "./types.ts";
 
 /* ------------------------- Anthropic → OpenAI ----------------------------- */
 
 /** Anthropic tool defs use `input_schema`; OpenAI nests a `function.parameters`. */
-export function translateTools(tools: AnthropicTool[] | undefined): OpenAITool[] | undefined {
+export function translateTools(tools: ToolDef[] | undefined): OpenAITool[] | undefined {
   if (!tools || tools.length === 0) return undefined;
   return tools.map((t) => ({
     type: "function" as const,
@@ -35,7 +35,7 @@ export function translateTools(tools: AnthropicTool[] | undefined): OpenAITool[]
 }
 
 export function translateToolChoice(
-  choice: AnthropicMessagesRequest["tool_choice"],
+  choice: MessagesRequest["tool_choice"],
 ): OpenAIChatCompletionRequest["tool_choice"] {
   if (!choice) return undefined;
   switch (choice.type) {
@@ -55,7 +55,7 @@ function flattenText(blocks: Array<{ type: string; text?: string }>): string {
 
 /** Anthropic image block → OpenAI `image_url` part. Inline bytes become a
  * data: URI, which is what OpenAI-compatible vision backends expect. */
-export function imageToPart(block: AnthropicImageBlock): OpenAIContentPart {
+export function imageToPart(block: ImageBlock): OpenAIContentPart {
   const src = block.source;
   if (src.type === "url") {
     return { type: "image_url", image_url: { url: src.url } };
@@ -75,15 +75,15 @@ function narrowContent(parts: OpenAIContentPart[]): string | OpenAIContentPart[]
   return parts;
 }
 
-function toolResultToMessage(block: AnthropicToolResultBlock): OpenAIChatMessage[] {
+function toolResultToMessage(block: ToolResultBlock): OpenAIChatMessage[] {
   if (typeof block.content === "string") {
     return [{ role: "tool", tool_call_id: block.tool_use_id, content: block.content }];
   }
 
   // `role: "tool"` messages are text-only in the OpenAI schema, so an image
   // returned by a tool has to ride along in a following user message rather
-  // than being dropped (Claude Code's screenshot tools do exactly this).
-  const images = block.content.filter((b): b is AnthropicImageBlock => b.type === "image");
+  // than being dropped (the CLI's screenshot tools do exactly this).
+  const images = block.content.filter((b): b is ImageBlock => b.type === "image");
   const out: OpenAIChatMessage[] = [
     {
       role: "tool",
@@ -101,7 +101,7 @@ function toolResultToMessage(block: AnthropicToolResultBlock): OpenAIChatMessage
  * OpenAI messages. A single assistant turn that contains both text and tool_use
  * becomes one assistant message (text + tool_calls); tool_result blocks become
  * separate `role: "tool"` messages. */
-export function translateMessage(msg: AnthropicMessage): OpenAIChatMessage[] {
+export function translateMessage(msg: ChatMessage): OpenAIChatMessage[] {
   // Plain string content is the common case for user turns.
   if (typeof msg.content === "string") {
     return [{ role: msg.role, content: msg.content }];
@@ -157,7 +157,7 @@ export function translateMessage(msg: AnthropicMessage): OpenAIChatMessage[] {
 }
 
 export function translateSystem(
-  system: AnthropicMessagesRequest["system"],
+  system: MessagesRequest["system"],
 ): OpenAIChatMessage | null {
   if (!system) return null;
   if (typeof system === "string") return { role: "system", content: system };
@@ -167,10 +167,10 @@ export function translateSystem(
 
 /** Build the full OpenAI chat-completion request from an Anthropic request. */
 export function buildOpenAIRequest(
-  req: AnthropicMessagesRequest,
+  req: MessagesRequest,
   modelOverride: string,
-  /** Upper bound on output tokens. Claude Code sizes `max_tokens` for a
-   * 200k-context Claude model; a smaller backend will either error or silently
+  /** Upper bound on output tokens. The CLI sizes `max_tokens` for a
+   * 200k-context frontier model; a smaller backend will either error or silently
    * truncate, so clamp when the real ceiling is known. */
   maxOutputTokens?: number | null,
 ): OpenAIChatCompletionRequest {
@@ -221,13 +221,13 @@ function nanoid(prefix: string): string {
 export function translateOpenAIResponse(
   res: OpenAIChatCompletionResponse,
   requestModel: string,
-): AnthropicMessagesResponse {
+): MessagesResponse {
   const choice = res.choices[0];
   if (!choice) {
     throw new Error("OpenAI response contained no choices");
   }
 
-  const content: AnthropicContentBlock[] = [];
+  const content: ContentBlock[] = [];
   if (choice.message.content) {
     content.push({ type: "text", text: choice.message.content });
   } else {
@@ -259,7 +259,7 @@ export function translateOpenAIResponse(
     }
   }
 
-  const stop_reason: AnthropicMessagesResponse["stop_reason"] =
+  const stop_reason: MessagesResponse["stop_reason"] =
     choice.finish_reason === "tool_calls"
       ? "tool_use"
       : choice.finish_reason === "length"

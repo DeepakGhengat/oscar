@@ -1,5 +1,5 @@
-// Alias layer that makes backend models selectable from Claude Code's /model.
-// Claude Code drops any discovered model id that doesn't match
+// Alias layer that makes backend models selectable from the CLI's /model.
+// The CLI drops any discovered model id that doesn't match
 // /^(claude|anthropic)/i, so every backend id is advertised under a
 // `claude-oscar-…` alias and mapped back on the way in.
 
@@ -16,8 +16,8 @@ import {
 } from "../src/catalog.ts";
 import { DEFAULT_PROVIDER, type Provider } from "../src/providers.ts";
 
-/** The filter Claude Code applies to gateway-discovered model ids. */
-const CLAUDE_FILTER = /^(claude|anthropic)/i;
+/** The filter the CLI applies to gateway-discovered model ids. */
+const GATEWAY_ID_FILTER = /^(claude|anthropic)/i;
 
 const OLLAMA_IDS = [
   "qwen2.5:7b",
@@ -38,11 +38,11 @@ function single(ids: string[]) {
   return buildCatalog([{ provider: provider(DEFAULT_PROVIDER), ids }]);
 }
 
-test("every advertised alias survives Claude Code's id filter", () => {
+test("every advertised alias survives the CLI's id filter", () => {
   const catalog = single(OLLAMA_IDS);
   assert.ok(catalog.entries.length > 0);
   for (const e of catalog.entries) {
-    assert.match(e.alias, CLAUDE_FILTER, `${e.alias} would be dropped by the picker`);
+    assert.match(e.alias, GATEWAY_ID_FILTER, `${e.alias} would be dropped by the picker`);
   }
 });
 
@@ -117,7 +117,7 @@ const MULTI = () =>
 test("several backends appear in one picker, each tagged with its provider", () => {
   const body = modelsResponse(MULTI());
   assert.equal(body.data.length, 4);
-  for (const m of body.data) assert.match(m.id, CLAUDE_FILTER);
+  for (const m of body.data) assert.match(m.id, GATEWAY_ID_FILTER);
   assert.ok(body.data.every((m) => /\((local|cloud)\)$/.test(m.display_name)));
 });
 

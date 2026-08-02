@@ -1,15 +1,15 @@
 // StreamTranslator state machine: block transitions, multiple tool calls,
-// abnormal terminations. Claude Code's renderer desyncs if block indices or
+// abnormal terminations. The CLI's renderer desyncs if block indices or
 // start/stop pairing are wrong, so those invariants are asserted directly.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { StreamTranslator, type AnthropicStreamEvent } from "../src/stream.ts";
+import { StreamTranslator, type StreamEvent } from "../src/stream.ts";
 import type { OpenAIStreamChunk } from "../src/types.ts";
 
-function drain(chunks: OpenAIStreamChunk[], model = "m"): AnthropicStreamEvent[] {
+function drain(chunks: OpenAIStreamChunk[], model = "m"): StreamEvent[] {
   const t = new StreamTranslator(model);
-  const out: AnthropicStreamEvent[] = [];
+  const out: StreamEvent[] = [];
   for (const c of chunks) out.push(...t.feed(c));
   out.push(...t.flush());
   return out;
@@ -46,7 +46,7 @@ const toolCall = (
 });
 
 /** Every content_block_start must have exactly one matching stop, same index. */
-function assertBlocksBalanced(events: AnthropicStreamEvent[]): void {
+function assertBlocksBalanced(events: StreamEvent[]): void {
   const open: number[] = [];
   for (const e of events) {
     if (e.type === "content_block_start") {

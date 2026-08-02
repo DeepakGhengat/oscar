@@ -1,5 +1,5 @@
-// Tiny zero-dependency terminal UI helpers (ANSI). Matches the feel of
-// OpenClaude's welcome screen — banner, boxed select, dim descriptions —
+// Tiny zero-dependency terminal UI helpers (ANSI). Gives the wizard a
+// proper welcome screen — banner, boxed select, dim descriptions —
 // without pulling React/Ink/chalk into a small proxy launcher.
 
 const isTTY = process.stdout.isTTY && !process.env.NO_COLOR;
@@ -17,7 +17,7 @@ export const c = {
   gray: ansi("90"),
 };
 
-/** A centered-ish banner with a tagline, like OpenClaude's first-run header. */
+/** A centered-ish banner with a tagline, for first-run headers. */
 export function banner(title: string, subtitle?: string): string {
   const line = "─".repeat(Math.max(title.length + 4, 40));
   return (

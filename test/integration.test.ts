@@ -12,8 +12,8 @@ import { loadConfig } from "../src/env.ts";
 import { routeMessageRequest } from "../src/proxy.ts";
 import { clearCatalogCache, getCatalog, modelsResponse } from "../src/catalog.ts";
 import type {
-  AnthropicMessagesRequest,
-  AnthropicMessagesResponse,
+  MessagesRequest,
+  MessagesResponse,
   OpenAIChatCompletionResponse,
   OpenAIStreamChunk,
 } from "../src/types.ts";
@@ -155,7 +155,7 @@ function startProxy(): Server {
       res.end(JSON.stringify({ ok: true }));
       return;
     }
-    // Mirrors src/server.ts: the endpoint Claude Code's gateway discovery hits.
+    // Mirrors src/server.ts: the endpoint the CLI's gateway discovery hits.
     if (req.method === "GET" && url.pathname === "/v1/models") {
       const catalog = await getCatalog(loadConfig());
       res.writeHead(200, { "content-type": "application/json" });
@@ -218,7 +218,7 @@ test("e2e: /v1/messages is translated to /chat/completions and back", async () =
   proxyServer = startProxy();
   proxyPort = await listenOnEphemeral(proxyServer);
 
-  const anthropicReq: AnthropicMessagesRequest = {
+  const anthropicReq: MessagesRequest = {
     model: "claude-3-5-sonnet",
     max_tokens: 512,
     system: "be brief",
@@ -242,7 +242,7 @@ test("e2e: /v1/messages is translated to /chat/completions and back", async () =
     body: JSON.stringify(anthropicReq),
   });
   assert.strictEqual(res.status, 200);
-  const body = (await res.json()) as AnthropicMessagesResponse;
+  const body = (await res.json()) as MessagesResponse;
 
   // The Anthropic-shaped response should carry the mock's text + tool_use.
   assert.strictEqual(body.type, "message");
@@ -284,7 +284,7 @@ test("e2e: streaming response is translated to Anthropic SSE events", async () =
   proxyServer = startProxy();
   proxyPort = await listenOnEphemeral(proxyServer);
 
-  const anthropicReq: AnthropicMessagesRequest = {
+  const anthropicReq: MessagesRequest = {
     model: "claude-3-5-sonnet",
     max_tokens: 16,
     messages: [{ role: "user", content: "stream me hello" }],
@@ -337,7 +337,7 @@ test("e2e: /model discovery advertises backend models and routes to them", async
   proxyServer = startProxy();
   proxyPort = await listenOnEphemeral(proxyServer);
 
-  // 1. What Claude Code fetches at startup to populate the /model picker.
+  // 1. What the CLI fetches at startup to populate the /model picker.
   const listRes = await fetch(`http://localhost:${proxyPort}/v1/models?limit=1000`);
   assert.strictEqual(listRes.status, 200);
   const list = (await listRes.json()) as {
@@ -364,7 +364,7 @@ test("e2e: /model discovery advertises backend models and routes to them", async
       model: picked.id,
       max_tokens: 16,
       messages: [{ role: "user", content: "hi" }],
-    } satisfies AnthropicMessagesRequest),
+    } satisfies MessagesRequest),
   });
   assert.strictEqual(res.status, 200);
 
@@ -392,7 +392,7 @@ test("e2e: passthrough mode is used when USE_OPENAI_API is unset", async () => {
       stop_reason: "end_turn",
       stop_sequence: null,
       usage: { input_tokens: 1, output_tokens: 1 },
-    } satisfies AnthropicMessagesResponse);
+    } satisfies MessagesResponse);
     const buf = Buffer.from(payload);
     res.writeHead(200, { "content-type": "application/json", "content-length": buf.length });
     res.end(buf);
@@ -400,13 +400,13 @@ test("e2e: passthrough mode is used when USE_OPENAI_API is unset", async () => {
   const fakePort = await listenOnEphemeral(fakeAnthropic);
 
   process.env.ANTHROPIC_API_KEY = "ant-test";
-  // env.ts prefers ANTHROPIC_REAL_BASE_URL, then ANTHROPIC_BASE_URL.
-  process.env.ANTHROPIC_REAL_BASE_URL = `http://localhost:${fakePort}`;
+  // env.ts prefers OSCAR_UPSTREAM_BASE_URL, then ANTHROPIC_BASE_URL.
+  process.env.OSCAR_UPSTREAM_BASE_URL = `http://localhost:${fakePort}`;
 
   proxyServer = startProxy();
   proxyPort = await listenOnEphemeral(proxyServer);
 
-  const anthropicReq: AnthropicMessagesRequest = {
+  const anthropicReq: MessagesRequest = {
     model: "claude-3-5-sonnet",
     max_tokens: 8,
     messages: [{ role: "user", content: "passthrough please" }],
@@ -420,13 +420,13 @@ test("e2e: passthrough mode is used when USE_OPENAI_API is unset", async () => {
   assert.strictEqual(res.status, 200);
   assert.strictEqual(receivedPath, "/v1/messages");
   // Body forwarded verbatim (model unchanged — not translated to OpenAI).
-  assert.strictEqual((receivedBody as AnthropicMessagesRequest).model, "claude-3-5-sonnet");
-  assert.deepEqual((receivedBody as AnthropicMessagesRequest).messages[0], {
+  assert.strictEqual((receivedBody as MessagesRequest).model, "claude-3-5-sonnet");
+  assert.deepEqual((receivedBody as MessagesRequest).messages[0], {
     role: "user",
     content: "passthrough please",
   });
 
-  const body = (await res.json()) as AnthropicMessagesResponse;
+  const body = (await res.json()) as MessagesResponse;
   assert.deepEqual(body.content[0], { type: "text", text: "passthrough ok" });
 
   await new Promise<void>((r) => fakeAnthropic.close(() => r()));

@@ -11,12 +11,12 @@
 //   message_stop           → ends the stream
 //
 // We buffer per-tool-call argument JSON so it can be streamed as
-// `input_json_delta` partial strings, matching what Claude Code renders.
+// `input_json_delta` partial strings, matching what the CLI renders.
 
 import type { OpenAIStreamChunk } from "./types.ts";
 import { safeParseToolInput, nanoid } from "./openaiShim.ts";
 
-export interface AnthropicStreamEvent {
+export interface StreamEvent {
   type:
     | "message_start"
     | "content_block_start"
@@ -53,8 +53,8 @@ export class StreamTranslator {
   }
 
   /** Feed a parsed OpenAI chunk; returns 0..n Anthropic events to emit. */
-  feed(chunk: OpenAIStreamChunk): AnthropicStreamEvent[] {
-    const events: AnthropicStreamEvent[] = [];
+  feed(chunk: OpenAIStreamChunk): StreamEvent[] {
+    const events: StreamEvent[] = [];
 
     if (!this.started) {
       events.push({
@@ -207,8 +207,8 @@ export class StreamTranslator {
   }
 
   /** Finalize in case the stream ended without an explicit finish_reason. */
-  flush(): AnthropicStreamEvent[] {
-    const events: AnthropicStreamEvent[] = [];
+  flush(): StreamEvent[] {
+    const events: StreamEvent[] = [];
     if (!this.started) return events;
     if (this.currentBlockKind !== null) {
       events.push({ type: "content_block_stop", index: this.blockIndex });

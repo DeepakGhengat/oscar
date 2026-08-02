@@ -4,7 +4,7 @@
 // gateways) the model listing is public: it returns 200 with no key, and 200
 // with a made-up key. So a wizard that validates by listing models happily
 // accepts a placeholder like "ollama" and the mistake only surfaces later, as
-// a 401 during a real conversation that reads like Claude Code's own login
+// a 401 during a real conversation that reads like the CLI's own login
 // failing. The only honest check is a real completion.
 
 export interface PreflightResult {

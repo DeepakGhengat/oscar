@@ -25,7 +25,7 @@ test("formatEnv: cloud config writes OpenAI vars + port", () => {
     openAIKey: "sk-test",
     openAIModel: "gpt-4o-mini",
     openAIBaseURL: "https://api.openai.com/v1",
-    anthropicKey: null,
+    upstreamKey: null,
     port: 8787,
   });
   assert.match(out, /USE_OPENAI_API=1/);
@@ -42,7 +42,7 @@ test("formatEnv: passthrough config writes only anthropic key + port", () => {
     openAIKey: null,
     openAIModel: null,
     openAIBaseURL: null,
-    anthropicKey: "sk-ant",
+    upstreamKey: "sk-ant",
     port: 8787,
   });
   assert.match(out, /ANTHROPIC_API_KEY=sk-ant/);

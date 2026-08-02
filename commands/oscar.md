@@ -1,11 +1,11 @@
 ---
-description: Start the oscar proxy and launch the Claude Code CLI against it.
+description: Start the oscar proxy and launch the coding CLI against it.
 ---
 
 # Run Free
 
-Starts the local translation proxy and launches the bundled `claude` CLI
-pointed at it, so Claude Code drives an OpenAI-compatible backend.
+Starts the local translation proxy and launches the bundled CLI
+pointed at it, so the CLI drives an OpenAI-compatible backend.
 
 ## Usage
 
@@ -15,7 +15,7 @@ bash scripts/run.sh
 
 ## Prerequisites
 
-- The Claude Code SDK is installed (`sdk/bin/claude` or `claude` on `PATH`).
+- The CLI is installed (`sdk/bin/claude` or `claude` on `PATH`).
   If missing, run `bash scripts/install-sdk.sh` first.
 - `npm install` has been run in this directory.
 
@@ -37,4 +37,4 @@ endpoint using `ANTHROPIC_API_KEY`.
 
 1. The proxy starts on `$PROXY_PORT` (default `8787`).
 2. `ANTHROPIC_BASE_URL` is pointed at the proxy.
-3. The `claude` CLI is exec'd with any args you passed through.
+3. The CLI is exec'd with any args you passed through.
