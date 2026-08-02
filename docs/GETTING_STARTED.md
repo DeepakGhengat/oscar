@@ -50,7 +50,7 @@ npm install -g @anthropic-ai/claude-code
 ## Step 4 — Install O.S.C.A.R.
 
 ```bash
-git clone https://github.com/LORDCYBERGOD/oscar.git
+git clone https://github.com/DeepakGhengat/oscar.git
 ```
 
 ```bash
