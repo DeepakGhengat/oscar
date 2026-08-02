@@ -465,6 +465,10 @@ Tested against Ollama, local and cloud. Verified with CLI **2.1.219**.
 
 Model discovery relies on the CLI's gateway-discovery behaviour, which is version-dependent. If a future release changes it, `/model` may stop listing backend models while everything else keeps working.
 
+## Repository topics
+
+Discovery metadata lives in two places that must agree: `package.json` keywords, and the repository's GitHub topics. The list, and how to apply it, is in [docs/TOPICS.md](docs/TOPICS.md).
+
 ## Contributing
 
 Contributions are welcome. For anything larger than a fix, open an issue first so the scope is clear before implementation. See [Development](#development) for the test and typecheck commands.
