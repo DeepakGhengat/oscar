@@ -1,6 +1,6 @@
 // Local token estimation for POST /v1/messages/count_tokens.
 //
-// Claude Code calls that endpoint to decide when to compact a conversation.
+// The CLI calls that endpoint to decide when to compact a conversation.
 // Forwarding it to api.anthropic.com is not an option in OpenAI-routing mode —
 // the CLI is holding a dummy key, so the call 401s and the CLI loses its
 // context accounting. OpenAI-compatible backends don't offer an equivalent
@@ -10,7 +10,7 @@
 // point, and it should err high: undercounting means the CLI compacts too late
 // and the backend rejects an over-long prompt.
 
-import type { AnthropicMessagesRequest, AnthropicContentBlock } from "./types.ts";
+import type { MessagesRequest, ContentBlock } from "./types.ts";
 
 /** Characters per token. Real BPE averages ~4 for prose and ~3 for code and
  * JSON; 3.2 keeps the estimate on the safe (high) side for both. */
@@ -21,14 +21,14 @@ const PER_MESSAGE_OVERHEAD = 4;
 
 /** A base64 image costs far less than its encoded length suggests — Anthropic
  * bills roughly (w*h)/750, and ~1100 is a reasonable stand-in for the
- * screenshot-sized images Claude Code sends. */
+ * screenshot-sized images the CLI sends. */
 const PER_IMAGE_TOKENS = 1100;
 
 function textTokens(s: string): number {
   return Math.ceil(s.length / CHARS_PER_TOKEN);
 }
 
-function blockTokens(block: AnthropicContentBlock): number {
+function blockTokens(block: ContentBlock): number {
   switch (block.type) {
     case "text":
       return textTokens(block.text);
@@ -52,7 +52,7 @@ function blockTokens(block: AnthropicContentBlock): number {
 }
 
 /** Estimate the input tokens an Anthropic-shaped request would consume. */
-export function estimateInputTokens(req: AnthropicMessagesRequest): number {
+export function estimateInputTokens(req: MessagesRequest): number {
   let total = 0;
 
   if (typeof req.system === "string") {
@@ -73,7 +73,7 @@ export function estimateInputTokens(req: AnthropicMessagesRequest): number {
   }
 
   // Tool definitions are re-sent on every request and are pure JSON schema —
-  // on a full Claude Code tool set this is thousands of tokens, so counting it
+  // on a full the CLI tool set this is thousands of tokens, so counting it
   // matters more than the message framing does.
   for (const tool of req.tools ?? []) {
     total += textTokens(tool.name);

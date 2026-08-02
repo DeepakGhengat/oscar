@@ -15,7 +15,7 @@ const KEYS = [
   "OSCAR_MAX_OUTPUT_TOKENS",
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_BASE_URL",
-  "ANTHROPIC_REAL_BASE_URL",
+  "OSCAR_UPSTREAM_BASE_URL",
 ];
 let saved: Record<string, string | undefined> = {};
 const servers: Server[] = [];
@@ -244,13 +244,13 @@ test("passthrough forwards the body untranslated and injects auth", async () => 
     }),
   );
   process.env.ANTHROPIC_API_KEY = "ant-real-key";
-  process.env.ANTHROPIC_REAL_BASE_URL = `http://localhost:${port}`;
+  process.env.OSCAR_UPSTREAM_BASE_URL = `http://localhost:${port}`;
 
   const r = await routeMessageRequest(
     body("claude-sonnet-4-5"),
     new Headers({ "content-type": "application/json", host: "should-be-dropped", "x-custom": "kept" }),
   );
-  assert.equal(r.route, "anthropic");
+  assert.equal(r.route, "upstream");
   assert.equal(r.response.status, 200);
 
   // Body untouched — no OpenAI translation on this leg.
@@ -271,7 +271,7 @@ test("passthrough relays the upstream status code", async () => {
       json(res, 401, { error: { message: "bad key" } });
     }),
   );
-  process.env.ANTHROPIC_REAL_BASE_URL = `http://localhost:${port}`;
+  process.env.OSCAR_UPSTREAM_BASE_URL = `http://localhost:${port}`;
   const r = await routeMessageRequest(body("claude-sonnet-4-5"), new Headers());
   assert.equal(r.response.status, 401);
 });
@@ -283,9 +283,9 @@ test("an empty body still routes to passthrough without throwing", async () => {
       json(res, 200, { ok: true });
     }),
   );
-  process.env.ANTHROPIC_REAL_BASE_URL = `http://localhost:${port}`;
+  process.env.OSCAR_UPSTREAM_BASE_URL = `http://localhost:${port}`;
   const r = await routeMessageRequest(undefined, new Headers());
-  assert.equal(r.route, "anthropic");
+  assert.equal(r.route, "upstream");
   assert.equal(r.incomingModel, undefined);
 });
 
@@ -299,6 +299,6 @@ test("routing flag off sends traffic to Anthropic even with OpenAI vars set", as
   process.env.USE_OPENAI_API = "0";
   process.env.OPENAI_API_KEY = "sk-test";
   process.env.OPENAI_MODEL = "m";
-  process.env.ANTHROPIC_REAL_BASE_URL = `http://localhost:${port}`;
-  assert.equal((await routeMessageRequest(body("claude-sonnet-4-5"), new Headers())).route, "anthropic");
+  process.env.OSCAR_UPSTREAM_BASE_URL = `http://localhost:${port}`;
+  assert.equal((await routeMessageRequest(body("claude-sonnet-4-5"), new Headers())).route, "upstream");
 });

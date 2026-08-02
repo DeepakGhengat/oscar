@@ -59,17 +59,17 @@ models:  26 across 2 backend(s)
 O.S.C.A.R. retries a partial result after 5 seconds, so restarting usually
 fixes a transient case.
 
-**If the count looks right but `/model` is still bare** — Claude Code's gateway
+**If the count looks right but `/model` is still bare** — the CLI's gateway
 discovery didn't run. It requires all of:
 
 - `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1` (the launcher sets this)
 - `ANTHROPIC_BASE_URL` pointing somewhere that isn't `api.anthropic.com`
 - no `CLAUDE_CODE_USE_BEDROCK` / `_VERTEX` / `_FOUNDRY` in your environment
 
-That last one is easy to miss — any of those switches Claude Code to a
+That last one is easy to miss — any of those switches the CLI to a
 third-party provider mode where discovery is skipped entirely.
 
-**If you launched Claude Code yourself** rather than through `oscar`, none of
+**If you launched the CLI yourself** rather than through `oscar`, none of
 the required environment is set. Use the `oscar` command.
 
 ---
@@ -80,7 +80,7 @@ Your backend rejected its key. The message names the provider:
 
 ```
 Your backend rejected the request (401). https://ollama.com/v1 (provider "cloud")
-refused the API key — this is not a Claude Code login problem.
+refused the API key — this is not a the CLI login problem.
 ```
 
 Run `oscar --doctor` to confirm which one and why.
@@ -104,17 +104,17 @@ wizard and `--doctor` both end with a real completion instead.
 
 ## `Failed to authenticate` right at startup
 
-If it names your backend, see above. If it mentions Claude Code's own login,
+If it names your backend, see above. If it mentions the CLI's own login,
 the dummy-key mechanism didn't take effect — usually a stale profile. Remove
 the throwaway profile and relaunch:
 
 ```bash
-rm -rf ~/.oscar/claude-config
+rm -rf ~/.oscar/cli-profile
 ```
 
 ---
 
-## Model works in `--doctor` but not in Claude Code
+## Model works in `--doctor` but not in the CLI
 
 Usually a name mismatch. `oscar --doctor` reports it:
 
@@ -134,7 +134,7 @@ room — raise `OSCAR_MAX_OUTPUT_TOKENS`, or remove it.
 ## Answers get cut off mid-sentence
 
 The opposite problem: your ceiling is too low, or the backend's own limit is
-below what Claude Code requested. Set a realistic ceiling per model:
+below what the CLI requested. Set a realistic ceiling per model:
 
 ```json
 { "providers": { "local": { "baseURL": "...", "models": {
@@ -160,7 +160,7 @@ Or set `PROXY_PORT` in `~/.oscar/.env`.
 
 ## Everything worked yesterday
 
-Check whether Claude Code updated. Model discovery depends on behaviour that
+Check whether the CLI updated. Model discovery depends on behaviour that
 is version-specific; verified against **2.1.219**. If `/model` stops listing
 backend models after an update, that's the likely cause — everything else will
 keep working.
@@ -175,7 +175,7 @@ Run the proxy in one terminal to watch its log:
 npm start
 ```
 
-and Claude Code in another, pointed at it:
+and the CLI in another, pointed at it:
 
 ```bash
 ANTHROPIC_BASE_URL=http://localhost:8787 ANTHROPIC_API_KEY=oscar-dummy-key CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1 claude

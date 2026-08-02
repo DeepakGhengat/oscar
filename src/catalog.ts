@@ -1,8 +1,8 @@
-// Backend model catalog + Claude-Code-compatible aliasing.
+// Backend model catalog + CLI-compatible aliasing.
 //
 // Why aliases exist
 // -----------------
-// Claude Code discovers extra /model entries from an LLM gateway by fetching
+// The CLI discovers extra /model entries from an LLM gateway by fetching
 // `${ANTHROPIC_BASE_URL}/v1/models?limit=1000` at startup (gated on
 // CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, a non-anthropic base URL, and a
 // first-party provider). It then applies a hard filter to the ids it gets back:
@@ -39,7 +39,7 @@ const NON_CHAT = /(?:^|[-_/])(?:embed|embedding|rerank|reranker)(?:$|[-_:/.])/i;
 export interface CatalogEntry {
   /** Real backend id, e.g. `glm-5.2:cloud`. */
   id: string;
-  /** Alias advertised to Claude Code, e.g. `claude-oscar-cloud-glm-5.2`. */
+  /** Alias advertised to the CLI, e.g. `claude-oscar-cloud-glm-5.2`. */
   alias: string;
   /** Which backend serves it. */
   provider: Provider;
@@ -56,7 +56,7 @@ export interface Catalog {
 
 const EMPTY: Catalog = { entries: [], byAlias: new Map(), providers: [], unreachable: [] };
 
-/** Strip everything Claude Code's model ids can't carry, keeping it readable. */
+/** Strip everything the CLI's model ids can't carry, keeping it readable. */
 export function sanitize(id: string): string {
   return id.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
 }
@@ -72,7 +72,7 @@ export function isChatModel(id: string): boolean {
 }
 
 /** Alias for one model on one provider. Provider-less in the legacy case so
- * aliases Claude Code already cached keep resolving. */
+ * aliases the CLI already cached keep resolving. */
 export function aliasFor(providerId: string, model: string, legacy: boolean): string {
   const stem = legacy ? sanitize(model) : `${sanitize(providerId)}-${sanitize(model)}`;
   return `${ALIAS_PREFIX}${stem}`;
@@ -115,12 +115,12 @@ export function buildCatalog(
 
 /** A complete answer is stable; hold it. */
 const TTL_OK_MS = 60_000;
-/** A partial answer means a backend was slow or down. Retry soon — Claude Code
+/** A partial answer means a backend was slow or down. Retry soon — the CLI
  * fetches the picker once at startup, so a provider that silently drops out
  * stays missing from /model for the whole session. */
 const TTL_PARTIAL_MS = 5_000;
 
-/** Request-path budget. Claude Code aborts its gateway discovery fetch after
+/** Request-path budget. The CLI aborts its gateway discovery fetch after
  * 3s, so answering /v1/models has to fit inside that. */
 export const PROBE_TIMEOUT_REQUEST_MS = 2_500;
 /** Startup budget. Nothing is waiting on us, and a remote backend's first
@@ -191,7 +191,7 @@ export async function getCatalog(cfg: ProxyConfig): Promise<Catalog> {
 }
 
 /** Fill the cache before anything asks, with a budget the request path can't
- * afford. Called at server start so Claude Code's one-shot discovery fetch
+ * afford. Called at server start so the CLI's one-shot discovery fetch
  * gets a complete list instead of whatever answered within 2.5s. */
 export async function warmCatalog(cfg: ProxyConfig): Promise<Catalog | null> {
   const { providers } = loadProviders(cfg);
@@ -228,7 +228,7 @@ export function toBackendModel(catalog: Catalog, bodyModel: string | undefined):
   return matches.find((e) => e.provider.id === DEFAULT_PROVIDER) ?? matches[0] ?? null;
 }
 
-/** The `/v1/models` payload Claude Code's gateway discovery expects. */
+/** The `/v1/models` payload the CLI's gateway discovery expects. */
 export function modelsResponse(catalog: Catalog): {
   object: "list";
   data: Array<{ id: string; object: "model"; display_name: string; created: number; owned_by: string }>;

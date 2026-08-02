@@ -6,8 +6,8 @@ import assert from "node:assert/strict";
 import { buildOpenAIRequest, imageToPart, translateMessage } from "../src/openaiShim.ts";
 import { estimateInputTokens } from "../src/tokens.ts";
 import type {
-  AnthropicMessage,
-  AnthropicMessagesRequest,
+  ChatMessage,
+  MessagesRequest,
   OpenAIContentPart,
 } from "../src/types.ts";
 
@@ -30,7 +30,7 @@ test("remote images keep their URL", () => {
 });
 
 test("a screenshot in a user turn reaches the backend", () => {
-  const msg: AnthropicMessage = {
+  const msg: ChatMessage = {
     role: "user",
     content: [
       { type: "text", text: "what's on screen?" },
@@ -103,7 +103,7 @@ test("thinking blocks are dropped without losing the reply", () => {
 });
 
 test("max_tokens is clamped to the backend ceiling", () => {
-  const req: AnthropicMessagesRequest = {
+  const req: MessagesRequest = {
     model: "claude-sonnet-4-5",
     max_tokens: 32000,
     messages: [{ role: "user", content: "hi" }],
@@ -112,7 +112,7 @@ test("max_tokens is clamped to the backend ceiling", () => {
   assert.equal(capped.max_tokens, 4096);
   assert.equal(capped.max_completion_tokens, 4096);
 
-  // No cap configured → pass Claude Code's value straight through.
+  // No cap configured → pass the CLI's value straight through.
   const uncapped = buildOpenAIRequest(req, "qwen2.5:7b", null);
   assert.equal(uncapped.max_tokens, 32000);
 
@@ -121,12 +121,12 @@ test("max_tokens is clamped to the backend ceiling", () => {
 });
 
 test("token estimate counts system, messages and tool schemas", () => {
-  const bare: AnthropicMessagesRequest = {
+  const bare: MessagesRequest = {
     model: "m",
     max_tokens: 10,
     messages: [{ role: "user", content: "hello world" }],
   };
-  const withTools: AnthropicMessagesRequest = {
+  const withTools: MessagesRequest = {
     ...bare,
     system: "you are a helpful assistant",
     tools: [

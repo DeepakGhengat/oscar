@@ -25,8 +25,9 @@ const cfg: ProxyConfig = {
   openAIModel: "qwen2.5:7b",
   openAIBaseURL: "http://localhost:11434/v1",
   maxOutputTokens: null,
-  anthropicKey: null,
-  anthropicBaseURL: "https://api.anthropic.com",
+  upstreamKey: null,
+  upstreamBaseURL: "https://api.anthropic.com",
+  upstreamAuth: "api-key",
   port: 8787,
 };
 

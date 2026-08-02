@@ -126,7 +126,7 @@ before(async () => {
       OPENAI_API_KEY: "sk-test",
       OPENAI_MODEL: "qwen2.5:7b",
       OPENAI_BASE_URL: `http://localhost:${backendPort}/v1`,
-      ANTHROPIC_REAL_BASE_URL: `http://localhost:${anthropicPort}`,
+      OSCAR_UPSTREAM_BASE_URL: `http://localhost:${anthropicPort}`,
       OSCAR_MAX_OUTPUT_TOKENS: "",
     },
   });
@@ -160,7 +160,7 @@ test("GET / is an alias for the health probe", async () => {
 
 /* ---------------------------- model discovery ----------------------------- */
 
-test("GET /v1/models advertises aliases Claude Code will not filter out", async () => {
+test("GET /v1/models advertises aliases the CLI will not filter out", async () => {
   const r = await fetch(url("/v1/models?limit=1000"));
   assert.equal(r.status, 200);
   const body = (await r.json()) as { object: string; has_more: boolean; data: { id: string; display_name: string }[] };

@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import { PROVIDER_PRESETS, formatEnv, probeModels } from "../src/setup.ts";
 import type { ProviderId, ProviderPreset } from "../src/setup.ts";
 
-test("PROVIDER_PRESETS: 7 presets with the expected ids and base URLs", () => {
+test("PROVIDER_PRESETS: 8 presets with the expected ids and base URLs", () => {
   const ids = PROVIDER_PRESETS.map((p) => p.id);
   assert.deepEqual(ids, [
-    "openai", "deepseek", "ollama", "lmstudio", "vllm", "custom", "passthrough",
+    "openai", "deepseek", "ollama", "lmstudio", "vllm", "custom",
+    "subscription", "passthrough",
   ]);
   const byId = Object.fromEntries(PROVIDER_PRESETS.map((p) => [p.id, p])) as Record<ProviderId, ProviderPreset>;
   assert.equal(byId.openai.baseURL, "https://api.openai.com/v1");
@@ -17,6 +18,10 @@ test("PROVIDER_PRESETS: 7 presets with the expected ids and base URLs", () => {
   assert.equal(byId.vllm.baseURL, "http://localhost:8000/v1");
   assert.equal(byId.custom.baseURL, null);
   assert.equal(byId.passthrough.kind, "passthrough");
+  // Account sign-in collects nothing: no base URL, no model, no key.
+  assert.equal(byId.subscription.kind, "subscription");
+  assert.equal(byId.subscription.baseURL, null);
+  assert.equal(byId.subscription.keyHint, null);
 });
 
 test("formatEnv: cloud config writes OpenAI vars + port", () => {
@@ -25,7 +30,7 @@ test("formatEnv: cloud config writes OpenAI vars + port", () => {
     openAIKey: "sk-test",
     openAIModel: "gpt-4o-mini",
     openAIBaseURL: "https://api.openai.com/v1",
-    anthropicKey: null,
+    upstreamKey: null,
     port: 8787,
   });
   assert.match(out, /USE_OPENAI_API=1/);
@@ -42,7 +47,7 @@ test("formatEnv: passthrough config writes only anthropic key + port", () => {
     openAIKey: null,
     openAIModel: null,
     openAIBaseURL: null,
-    anthropicKey: "sk-ant",
+    upstreamKey: "sk-ant",
     port: 8787,
   });
   assert.match(out, /ANTHROPIC_API_KEY=sk-ant/);

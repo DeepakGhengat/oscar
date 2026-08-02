@@ -348,7 +348,7 @@ Expected: FAIL — `Cannot find module '../src/setup.ts'`.
 Create `src/setup.ts` (helpers only — `main()` added in Task 5):
 
 ```typescript
-// Interactive setup wizard for claude-code-free.
+// Interactive setup wizard for oscar.
 // Pure helpers are exported for testing; main() runs the interactive loop.
 
 export type ProviderId =
@@ -385,7 +385,7 @@ export interface SetupConfig {
 /** Serialize a SetupConfig to .env text. */
 export function formatEnv(cfg: SetupConfig): string {
   const lines: string[] = [];
-  lines.push(`# claude-code-free config — written by src/setup.ts`);
+  lines.push(`# oscar config — written by src/setup.ts`);
   lines.push(`PROXY_PORT=${cfg.port}`);
   if (cfg.useOpenAI) {
     lines.push(`USE_OPENAI_API=1`);
@@ -566,7 +566,7 @@ function pickNumber(rl: ReturnType<typeof createInterface>, options: string[], p
 
 export async function main(): Promise<void> {
   const rl = createInterface({ input, output });
-  console.log("\n=== claude-code-free setup ===\n");
+  console.log("\n=== oscar setup ===\n");
 
   const idx = await pickNumber(
     rl,
@@ -703,7 +703,7 @@ git commit -m "feat: add interactive setup wizard (src/setup.ts main loop)"
 
 - [ ] **Step 1: Edit `scripts/run.sh`**
 
-Insert a setup-invocation block immediately after the `PORT=...` line (line 7) and before the `CLAUDE_BIN` lookup. The block:
+Insert a setup-invocation block immediately after the `PORT=...` line (line 7) and before the `CLI_BIN` lookup. The block:
 
 ```bash
 # Run the interactive setup wizard on first run or when --setup is passed.
@@ -727,7 +727,7 @@ Expected: SYNTAX OK (no output, exit 0).
 - [ ] **Step 3: Manual smoke test**
 
 Run: `rm -f .env && echo -e "7\nsk-ant-test\nY\nn\n" | bash scripts/run.sh`
-Expected: wizard runs, writes `.env` with `ANTHROPIC_API_KEY=sk-ant-test`, then `run.sh` proceeds to launch the claude CLI (or errors that `claude` isn't on PATH — either way the wizard ran). Stop the process.
+Expected: wizard runs, writes `.env` with `ANTHROPIC_API_KEY=sk-ant-test`, then `run.sh` proceeds to launch the CLI (or errors that the CLI isn't on PATH — either way the wizard ran). Stop the process.
 
 Clean up: `rm -f .env`
 
@@ -794,10 +794,10 @@ git commit -m "chore: add setup script and ignore .env"
 ### Task 8: Update SKILL.md / README to mention the wizard
 
 **Files:**
-- Modify: `skills/claude-code-free/SKILL.md`
+- Modify: `skills/oscar/SKILL.md`
 - Modify: `README.md`
 
-- [ ] **Step 1: Edit `skills/claude-code-free/SKILL.md`**
+- [ ] **Step 1: Edit `skills/oscar/SKILL.md`**
 
 Replace the "## Setup" section with:
 
@@ -821,7 +821,7 @@ npx tsx src/setup.ts
 If `.env` is missing, `bash scripts/run.sh` runs the wizard automatically before
 launching the CLI.
 
-Then install Node deps and the Claude SDK (one-time):
+Then install Node deps and the CLI (one-time):
 
 ```bash
 npm install
@@ -835,13 +835,13 @@ In the "Run" / setup area, add a short "Quick start" block describing `npm run s
 
 - [ ] **Step 3: Verify no stray Bun references and files are well-formed**
 
-Run: `grep -rn "bun" README.md skills/claude-code-free/SKILL.md`
+Run: `grep -rn "bun" README.md skills/oscar/SKILL.md`
 Expected: no matches.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add skills/claude-code-free/SKILL.md README.md
+git add skills/oscar/SKILL.md README.md
 git commit -m "docs: document the interactive setup wizard"
 ```
 

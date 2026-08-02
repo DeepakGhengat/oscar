@@ -12,9 +12,9 @@ import {
 } from "../src/openaiShim.ts";
 import { StreamTranslator } from "../src/stream.ts";
 import type {
-  AnthropicMessage,
-  AnthropicMessagesRequest,
-  AnthropicTool,
+  ChatMessage,
+  MessagesRequest,
+  ToolDef,
   OpenAIChatCompletionResponse,
   OpenAIStreamChunk,
 } from "../src/types.ts";
@@ -22,7 +22,7 @@ import type {
 /* --------------------------- Tool translation ----------------------------- */
 
 test("translateTools maps input_schema → function.parameters", () => {
-  const tools: AnthropicTool[] = [
+  const tools: ToolDef[] = [
     {
       name: "run_bash",
       description: "Run a shell command",
@@ -60,12 +60,12 @@ test("translateToolChoice maps any→required, tool→named function", () => {
 /* --------------------------- Message translation -------------------------- */
 
 test("translateMessage: plain user string", () => {
-  const m: AnthropicMessage = { role: "user", content: "hello" };
+  const m: ChatMessage = { role: "user", content: "hello" };
   assert.deepEqual(translateMessage(m), [{ role: "user", content: "hello" }]);
 });
 
 test("translateMessage: text blocks flatten to one string", () => {
-  const m: AnthropicMessage = {
+  const m: ChatMessage = {
     role: "user",
     content: [{ type: "text", text: "a" }, { type: "text", text: "b" }],
   };
@@ -73,7 +73,7 @@ test("translateMessage: text blocks flatten to one string", () => {
 });
 
 test("translateMessage: assistant text + tool_use → content + tool_calls", () => {
-  const m: AnthropicMessage = {
+  const m: ChatMessage = {
     role: "assistant",
     content: [
       { type: "text", text: "thinking..." },
@@ -92,7 +92,7 @@ test("translateMessage: assistant text + tool_use → content + tool_calls", () 
 });
 
 test("translateMessage: tool_result in user turn → role:tool messages", () => {
-  const m: AnthropicMessage = {
+  const m: ChatMessage = {
     role: "user",
     content: [
       { type: "tool_result", tool_use_id: "t1", content: "file.txt" },
@@ -118,7 +118,7 @@ test("translateSystem: string and block-array", () => {
 /* --------------------------- Full request build -------------------------- */
 
 test("buildOpenAIRequest assembles system + messages + tools + model override", () => {
-  const req: AnthropicMessagesRequest = {
+  const req: MessagesRequest = {
     model: "claude-3-5-sonnet",
     max_tokens: 1024,
     system: "you are helpful",
@@ -139,7 +139,7 @@ test("buildOpenAIRequest assembles system + messages + tools + model override", 
 });
 
 test("buildOpenAIRequest respects stream flag and stop_sequences", () => {
-  const req: AnthropicMessagesRequest = {
+  const req: MessagesRequest = {
     model: "x",
     max_tokens: 10,
     messages: [{ role: "user", content: "hi" }],

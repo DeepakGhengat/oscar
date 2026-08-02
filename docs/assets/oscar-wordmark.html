@@ -1,0 +1,73 @@
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: x; src: local("DejaVu Sans"); }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1660px; height: 560px; }
+  body {
+    background: #0b0f14;
+    font-family: "DejaVu Sans", "Liberation Sans", system-ui, sans-serif;
+    color: #e6edf3;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+  }
+  /* faint routing grid */
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(56,139,253,.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56,139,253,.055) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+  .glow {
+    position: absolute; width: 1200px; height: 420px; left: 50%; top: 50%;
+    transform: translate(-50%,-50%);
+    background: radial-gradient(ellipse at center, rgba(56,139,253,.20), transparent 68%);
+    filter: blur(38px);
+  }
+  .wrap { position: relative; text-align: center; padding: 0 60px; }
+
+  .title {
+    font-size: 148px; font-weight: 800; letter-spacing: .045em; line-height: 1;
+    background: linear-gradient(96deg, #7ee2ff 0%, #58a6ff 42%, #a78bfa 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .expand {
+    margin-top: 26px; font-size: 30px; font-weight: 600; letter-spacing: .015em;
+    color: #9fb2c6;
+  }
+  .expand b { color: #7ee2ff; font-weight: 800; }
+  .rule {
+    margin: 34px auto 0; width: 1080px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(88,166,255,.55), transparent);
+  }
+  .tag {
+    margin-top: 30px; font-size: 27px; color: #7d8fa3; letter-spacing: .012em;
+  }
+  .flow {
+    margin-top: 40px; display: flex; align-items: center; justify-content: center; gap: 22px;
+    font-family: "DejaVu Sans Mono", "Liberation Mono", monospace; font-size: 23px;
+  }
+  .pill {
+    border: 1px solid rgba(125,143,163,.42); border-radius: 999px;
+    padding: 12px 26px; color: #c3d0dd; background: rgba(255,255,255,.028);
+  }
+  .pill.mid { border-color: rgba(88,166,255,.72); color: #9ecbff; background: rgba(56,139,253,.11); }
+  .arrow { color: #58a6ff; font-size: 26px; }
+</style>
+<div class="grid"></div>
+<div class="glow"></div>
+<div class="wrap">
+  <div class="title">O.S.C.A.R.</div>
+  <div class="expand">
+    <b>O</b>rchestrator for <b>S</b>ystem <b>C</b>oding &amp; <b>A</b>utonomous <b>R</b>outing
+  </div>
+  <div class="rule"></div>
+  <div class="tag">Run your coding CLI on any model — local or cloud — without patching a line of it.</div>
+  <div class="flow">
+    <span class="pill">coding CLI</span>
+    <span class="arrow">&#9656;</span>
+    <span class="pill mid">O.S.C.A.R. :8787</span>
+    <span class="arrow">&#9656;</span>
+    <span class="pill">Ollama &middot; OpenAI &middot; DeepSeek &middot; vLLM</span>
+  </div>
+</div>

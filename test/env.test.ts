@@ -16,7 +16,7 @@ const KEYS = [
   "OSCAR_MAX_OUTPUT_TOKENS",
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_BASE_URL",
-  "ANTHROPIC_REAL_BASE_URL",
+  "OSCAR_UPSTREAM_BASE_URL",
   "PROXY_PORT",
 ];
 
@@ -94,10 +94,10 @@ test("passthrough mode needs neither key nor model", () => {
 test("base URLs lose their trailing slash so path joins can't double up", () => {
   enableOpenAI();
   process.env.OPENAI_BASE_URL = "http://localhost:11434/v1/";
-  process.env.ANTHROPIC_REAL_BASE_URL = "https://api.anthropic.com/";
+  process.env.OSCAR_UPSTREAM_BASE_URL = "https://api.anthropic.com/";
   const cfg = loadConfig();
   assert.equal(cfg.openAIBaseURL, "http://localhost:11434/v1");
-  assert.equal(cfg.anthropicBaseURL, "https://api.anthropic.com");
+  assert.equal(cfg.upstreamBaseURL, "https://api.anthropic.com");
 });
 
 test("OPENAI_BASE_URL defaults to OpenAI proper", () => {
@@ -105,21 +105,21 @@ test("OPENAI_BASE_URL defaults to OpenAI proper", () => {
   assert.equal(loadConfig().openAIBaseURL, "https://api.openai.com/v1");
 });
 
-test("ANTHROPIC_REAL_BASE_URL wins over ANTHROPIC_BASE_URL", () => {
-  // ANTHROPIC_BASE_URL points at *us* while claude is running, so passthrough
+test("OSCAR_UPSTREAM_BASE_URL wins over ANTHROPIC_BASE_URL", () => {
+  // ANTHROPIC_BASE_URL points at *us* while the CLI is running, so passthrough
   // must follow the REAL url or it would loop straight back into the proxy.
   process.env.ANTHROPIC_BASE_URL = "http://localhost:8787";
-  process.env.ANTHROPIC_REAL_BASE_URL = "https://api.anthropic.com";
-  assert.equal(loadConfig().anthropicBaseURL, "https://api.anthropic.com");
+  process.env.OSCAR_UPSTREAM_BASE_URL = "https://api.anthropic.com";
+  assert.equal(loadConfig().upstreamBaseURL, "https://api.anthropic.com");
 
   delete process.env.ANTHROPIC_BASE_URL;
-  assert.equal(loadConfig().anthropicBaseURL, "https://api.anthropic.com");
+  assert.equal(loadConfig().upstreamBaseURL, "https://api.anthropic.com");
 });
 
 test("ANTHROPIC_BASE_URL is used when it points somewhere else", () => {
   // A genuine alternate Anthropic endpoint (gateway, mock) must be honored.
   process.env.ANTHROPIC_BASE_URL = "https://gateway.example.com";
-  assert.equal(loadConfig().anthropicBaseURL, "https://gateway.example.com");
+  assert.equal(loadConfig().upstreamBaseURL, "https://gateway.example.com");
 });
 
 test("a base URL pointing back at this proxy is refused", () => {
@@ -133,7 +133,7 @@ test("a base URL pointing back at this proxy is refused", () => {
     "http://localhost:8787/",
   ]) {
     process.env.ANTHROPIC_BASE_URL = self;
-    assert.equal(loadConfig().anthropicBaseURL, "https://api.anthropic.com", `${self} should be refused`);
+    assert.equal(loadConfig().upstreamBaseURL, "https://api.anthropic.com", `${self} should be refused`);
   }
 });
 
@@ -141,14 +141,14 @@ test("the loop guard is port-specific, not host-specific", () => {
   // Another service on loopback is a legitimate target.
   process.env.PROXY_PORT = "8787";
   process.env.ANTHROPIC_BASE_URL = "http://localhost:9999";
-  assert.equal(loadConfig().anthropicBaseURL, "http://localhost:9999");
+  assert.equal(loadConfig().upstreamBaseURL, "http://localhost:9999");
 });
 
 test("a self-pointing REAL url falls through to the next candidate", () => {
   process.env.PROXY_PORT = "8787";
-  process.env.ANTHROPIC_REAL_BASE_URL = "http://localhost:8787";
+  process.env.OSCAR_UPSTREAM_BASE_URL = "http://localhost:8787";
   process.env.ANTHROPIC_BASE_URL = "https://gateway.example.com";
-  assert.equal(loadConfig().anthropicBaseURL, "https://gateway.example.com");
+  assert.equal(loadConfig().upstreamBaseURL, "https://gateway.example.com");
 });
 
 /* ---------------------------------- port ---------------------------------- */
@@ -201,8 +201,9 @@ test("every ProxyConfig field is populated", () => {
     openAIModel: "qwen2.5:7b",
     openAIBaseURL: "http://localhost:11434/v1",
     maxOutputTokens: 2048,
-    anthropicKey: "ant-key",
-    anthropicBaseURL: "https://api.anthropic.com",
+    upstreamKey: "ant-key",
+    upstreamBaseURL: "https://api.anthropic.com",
+    upstreamAuth: "api-key",
     port: 8080,
   });
 });

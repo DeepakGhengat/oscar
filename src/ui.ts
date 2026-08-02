@@ -1,5 +1,5 @@
-// Tiny zero-dependency terminal UI helpers (ANSI). Matches the feel of
-// OpenClaude's welcome screen — banner, boxed select, dim descriptions —
+// Tiny zero-dependency terminal UI helpers (ANSI). Gives the wizard a
+// proper welcome screen — banner, boxed select, dim descriptions —
 // without pulling React/Ink/chalk into a small proxy launcher.
 
 const isTTY = process.stdout.isTTY && !process.env.NO_COLOR;
@@ -17,22 +17,32 @@ export const c = {
   gray: ansi("90"),
 };
 
-/** A centered-ish banner with a tagline, like OpenClaude's first-run header. */
+/** A centered-ish banner with a tagline, for first-run headers.
+ *
+ * The title line has to be padded out to the rule's width. Without that, a
+ * title shorter than the 40-column floor leaves the closing bar hanging in
+ * mid-air, several columns left of the corners above and below it. */
 export function banner(title: string, subtitle?: string): string {
-  const line = "─".repeat(Math.max(title.length + 4, 40));
+  const inner = Math.max(title.length + 4, 40);
+  const line = "─".repeat(inner);
+  const pad = " ".repeat(inner - title.length - 4);
   return (
     `\n${c.cyan}${c.bold}╭${line}╮\n` +
-    `│  ${title}  │\n` +
+    `│  ${title}  ${pad}│\n` +
     `╰${line}╯${c.reset}` +
     (subtitle ? `\n${c.gray}${subtitle}${c.reset}\n` : "") +
     "\n"
   );
 }
 
-/** A rounded box around any block of text. */
+/** A rounded box around any block of text.
+ *
+ * Width follows the longest line. It used to be capped at 60 columns, which
+ * did not wrap anything — it just let longer lines punch through the right
+ * border and pushed that row's bar out past the corners. */
 export function box(text: string): string {
   const lines = text.split(/\r?\n/);
-  const width = Math.min(60, Math.max(...lines.map((l) => l.length)) + 2);
+  const width = Math.max(...lines.map((l) => l.length)) + 2;
   const top = `${c.cyan}╭${"─".repeat(width)}╮${c.reset}`;
   const bottom = `${c.cyan}╰${"─".repeat(width)}╯${c.reset}`;
   const body = lines

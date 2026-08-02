@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bring the installed @anthropic-ai/claude-code SDK into this folder so the
+# Bring the installed CLI package (@anthropic-ai/claude-code) into this folder so the
 # proxy + CLI can be run together. Tries npm global, then the standalone install.
 set -euo pipefail
 
@@ -34,7 +34,7 @@ if [ -z "$SRC" ]; then
   exit 1
 fi
 
-echo "Found claude-code at: $SRC"
+echo "Found the CLI at: $SRC"
 cp -r "$SRC/." "$DEST/"
 echo "Copied SDK into: $DEST"
 
