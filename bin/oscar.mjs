@@ -73,6 +73,19 @@ export function approveApiKey(dir, key) {
   return data;
 }
 
+/** Is `--model` being used on its own, meaning our offline picker?
+ *
+ * `--model <id>` belongs to the CLI, which takes a model for the session. We
+ * used to claim the flag either way and drop the id, so `oscar --model
+ * claude-oscar-glm-5.2-cloud` opened a picker instead of starting on that
+ * model. Only the bare form is ours. */
+export function isBareModelFlag(args) {
+  const i = args.indexOf("--model");
+  if (i < 0) return false;
+  const next = args[i + 1];
+  return next === undefined || next.startsWith("-");
+}
+
 /** Both worlds at once: an OpenAI-compatible backend *and* the Anthropic
  * account, selectable from one `/model` list.
  *
@@ -395,7 +408,10 @@ async function main() {
   // rewrite OPENAI_MODEL in .env, then exit (re-run without --model to
   // launch). If --model is combined with other args, we still just switch
   // and exit — the user can launch separately.
-  if (args.includes("--model")) {
+  // Bare `--model` is our offline picker. `--model <id>` is the CLI's own flag
+  // and must reach it: swallowing the id here meant the one command that names
+  // a model directly silently did something else.
+  if (isBareModelFlag(args)) {
     const dir = configDir();
     if (process.env.OSCAR_CONFIG === undefined) {
       process.env.OSCAR_CONFIG = dir;

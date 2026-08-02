@@ -163,3 +163,16 @@ test("pure account sign-in is still portless and keyless", () => {
   assert.doesNotMatch(out, /PROXY_PORT/);
   assert.doesNotMatch(out, /USE_OPENAI_API/);
 });
+
+/* --------------------------- the --model flag ----------------------------- */
+
+test("bare --model is our picker; --model <id> belongs to the CLI", async () => {
+  const { isBareModelFlag } = await import("../bin/oscar.mjs");
+  assert.equal(isBareModelFlag(["--model"]), true, "bare form opens our picker");
+  assert.equal(isBareModelFlag(["--model", "--verbose"]), true, "a flag is not a model id");
+  assert.equal(isBareModelFlag([]), false);
+  // Regression: this used to open the picker and discard the id, so the one
+  // command that names a model directly silently did something else.
+  assert.equal(isBareModelFlag(["--model", "claude-oscar-glm-5.2-cloud"]), false);
+  assert.equal(isBareModelFlag(["--model", "opus"]), false);
+});
