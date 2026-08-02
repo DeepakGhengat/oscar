@@ -7,7 +7,7 @@
 import { createInterface, type Interface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { basename } from "node:path";
-import { c } from "../ui.ts";
+import { c, createQuestion, type QuestionFn } from "../ui.ts";
 import { Agent, type Decision } from "../agent/loop.ts";
 import type { Tool } from "../agent/tools.ts";
 import type { Provider } from "../providers.ts";
@@ -56,21 +56,35 @@ const HELP = `
   write or command the first time.
 `;
 
-/** Ask once, accepting y / n / a. */
-async function approve(rl: Interface, tool: Tool, summary: string): Promise<Decision> {
+/** Ask once, accepting y / n / a.
+ *
+ * Uses the shared question helper rather than rl.question, because piped
+ * stdin reaches EOF as soon as the script is consumed: a later rl.question
+ * then rejects with "readline was closed" and the tool call is dropped with a
+ * baffling error. With input exhausted there is no answer to be had, so the
+ * safe reading of silence is refusal — never an unattended write. */
+async function approve(ask: QuestionFn, tool: Tool, summary: string): Promise<Decision> {
   const verb = tool.risk === "execute" ? "run a command" : "modify a file";
   process.stdout.write(
     `\n${c.yellow}?${c.reset} ${c.bold}${summary}${c.reset}\n` +
       `  ${c.gray}O.S.C.A.R. wants to ${verb}.${c.reset}\n`,
   );
-  for (;;) {
-    const a = (await rl.question(`  ${c.bold}[y]${c.reset}es / ${c.bold}[n]${c.reset}o / ${c.bold}[a]${c.reset}lways: `))
-      .trim()
-      .toLowerCase();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    let a: string;
+    try {
+      a = (await ask(`  ${c.bold}[y]${c.reset}es / ${c.bold}[n]${c.reset}o / ${c.bold}[a]${c.reset}lways: `))
+        .trim()
+        .toLowerCase();
+    } catch {
+      process.stdout.write(`\n${c.gray}  no input available — declining. Use --yes to pre-approve.${c.reset}\n`);
+      return "deny";
+    }
     if (a === "" || a === "y" || a === "yes") return "allow";
     if (a === "n" || a === "no") return "deny";
     if (a === "a" || a === "always") return "always";
   }
+  process.stdout.write(`\n${c.gray}  no clear answer — declining.${c.reset}\n`);
+  return "deny";
 }
 
 export async function runRepl(ctx: ReplContext, opts: { autoApprove?: boolean } = {}): Promise<void> {
@@ -78,6 +92,9 @@ export async function runRepl(ctx: ReplContext, opts: { autoApprove?: boolean } 
 
   let { provider, model } = ctx;
   const rl = createInterface({ input, output });
+  // One reader for the whole session: it queues piped input so prompts still
+  // work after an async turn has let stdin reach EOF.
+  const ask = createQuestion(rl);
   let agent = new Agent({ provider, model, cwd: ctx.cwd });
   if (opts.autoApprove) agent.grantAll();
 
@@ -89,7 +106,7 @@ export async function runRepl(ctx: ReplContext, opts: { autoApprove?: boolean } 
   for (;;) {
     let line: string;
     try {
-      line = (await rl.question(`${c.cyan}❯${c.reset} `)).trim();
+      line = (await ask(`${c.cyan}❯${c.reset} `)).trim();
     } catch {
       break; // ctrl-d
     }
@@ -125,7 +142,7 @@ export async function runRepl(ctx: ReplContext, opts: { autoApprove?: boolean } 
     }
     if (line === "/model" || line.startsWith("/model ")) {
       const arg = line.slice(6).trim();
-      const picked = arg || (await pickModel(rl, ctx.choices, `${provider.id}/${model}`));
+      const picked = arg || (await pickModel(ask, ctx.choices, `${provider.id}/${model}`));
       if (!picked) continue;
       const next = ctx.onModelChange(picked);
       if (!next) {
@@ -155,7 +172,7 @@ export async function runRepl(ctx: ReplContext, opts: { autoApprove?: boolean } 
           process.stdout.write(d);
         },
         onReasoning: (d) => process.stdout.write(`${c.gray}${d}${c.reset}`),
-        onApprove: (tool, summary) => approve(rl, tool, summary),
+        onApprove: (tool, summary) => approve(ask, tool, summary),
         onToolResult: (tool, summary, result, denied) => {
           const mark = denied ? `${c.red}✗${c.reset}` : `${c.green}✓${c.reset}`;
           const head = result.split("\n")[0]?.slice(0, 100) ?? "";
@@ -175,7 +192,7 @@ export async function runRepl(ctx: ReplContext, opts: { autoApprove?: boolean } 
 }
 
 /** Numbered picker for /model with no argument. */
-async function pickModel(rl: Interface, choices: string[], current: string): Promise<string | null> {
+async function pickModel(ask: QuestionFn, choices: string[], current: string): Promise<string | null> {
   if (!choices.length) {
     console.log(`${c.yellow}no models available — check your backend${c.reset}\n`);
     return null;
@@ -184,7 +201,7 @@ async function pickModel(rl: Interface, choices: string[], current: string): Pro
     const active = choice === current;
     console.log(`  ${String(i + 1).padStart(3)}. ${active ? `${c.green}${choice} ●${c.reset}` : choice}`);
   });
-  const a = (await rl.question(`${c.bold}number${c.reset} (blank to cancel): `)).trim();
+  const a = (await ask(`${c.bold}number${c.reset} (blank to cancel): `)).trim();
   if (!a) return null;
   const n = Number(a);
   if (!Number.isInteger(n) || n < 1 || n > choices.length) {
