@@ -396,6 +396,21 @@ async function main() {
     process.exit(1);
   }
 
+  // Default mode: O.S.C.A.R.'s own agent and interface. No proxy, no second
+  // process, no third-party CLI. `--cli` opts back into driving an external
+  // CLI through the translation proxy, which is what this used to be.
+  if (!args.includes("--cli")) {
+    const tsx = findTsx();
+    const mainTs = join(PKG_ROOT, "src", "tui", "main.ts");
+    const forwarded = args.filter((a) => a !== "--cli");
+    if (tsx) {
+      await runNode([tsx, mainTs, ...forwarded], { stdio: "inherit" });
+    } else {
+      await runNode(["tsx", mainTs, ...forwarded], { stdio: "inherit", useNpx: true });
+    }
+    process.exit(Number(process.env.OSCAR_SETUP_EXIT ?? 0));
+  }
+
   const port = process.env.PROXY_PORT || "8787";
 
   // Validate required env when OpenAI routing is on.
