@@ -104,6 +104,23 @@ claude-code-free --model    # pick a model, write it to .env, then relaunch
 claude-code-free --switch   # hot-swap a *running* proxy from a second terminal
 ```
 
+## Checking your setup
+
+```bash
+claude-code-free --doctor
+```
+
+Verifies the config end to end and exits non-zero if anything is wrong.
+
+It exists because one failure mode is nearly undiagnosable otherwise: on
+hosted backends like Ollama Cloud the `/models` listing is **public** — it
+answers `200` with no key at all, and `200` with a made-up one. A placeholder
+key such as `ollama` therefore passes every reachability check and only fails
+later, mid-conversation, as a `401` that reads like *Claude Code's* login
+expiring rather than your backend refusing `OPENAI_API_KEY`. `--doctor` sends
+a real one-token completion, which is the only check that distinguishes the
+two. The setup wizard now runs the same check before writing `.env`.
+
 ## Quick start
 
 Run the interactive setup wizard first — it asks which LLM provider to use

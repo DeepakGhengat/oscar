@@ -187,6 +187,24 @@ async function main() {
     process.exit(process.env.CCF_SETUP_EXIT ?? 0);
   }
 
+  // --doctor: check the config end to end (including a real completion, which
+  // is the only way to catch a placeholder API key on a backend whose /models
+  // listing is public) and exit.
+  if (args.includes("--doctor")) {
+    const dir = configDir();
+    if (process.env.CLAUDE_CODE_FREE_CONFIG === undefined) {
+      process.env.CLAUDE_CODE_FREE_CONFIG = dir;
+    }
+    const tsx = findTsx();
+    const doctorTs = join(PKG_ROOT, "src", "doctor.ts");
+    if (tsx) {
+      await runNode([tsx, doctorTs], { stdio: "inherit" });
+    } else {
+      await runNode(["tsx", doctorTs], { stdio: "inherit", useNpx: true });
+    }
+    process.exit(Number(process.env.CCF_SETUP_EXIT ?? 0));
+  }
+
   // --switch: talk to a *running* proxy's /_ccf/ control endpoints and
   // hot-swap the backend model live, without restarting claude. Use from a
   // second terminal while claude is running in the first.
@@ -305,7 +323,7 @@ async function main() {
   }
 
   // 4. Launch claude, forwarding args (minus any --setup we already handled).
-  const claudeArgs = args.filter((a) => a !== "--setup" && a !== "--switch");
+  const claudeArgs = args.filter((a) => a !== "--setup" && a !== "--switch" && a !== "--doctor");
   const claudeBin = findClaudeBin();
   console.log(
     `Launching: ${claudeBin.path}${claudeBin.version ? ` (claude-code ${claudeBin.version})` : ""}`,

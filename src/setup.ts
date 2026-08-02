@@ -76,6 +76,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { banner, box, c, createQuestion, select, type SelectOption } from "./ui.ts";
+import { verifyBackend } from "./preflight.ts";
 
 /** Close readline without triggering the libuv assertion on piped stdin (Windows). */
 function closeRl(rl: { close: () => void; pause?: () => void }): void {
@@ -155,6 +156,25 @@ export async function main(): Promise<void> {
       openAIModel = preset.defaultModel
         ? await ask(rl, "Model name", preset.defaultModel)
         : await askRequired(rl, "Model name");
+    }
+  }
+
+  // Verify with a real completion before writing anything. Listing models is
+  // not proof: on hosted Ollama the /models endpoint answers 200 to anyone, so
+  // a placeholder key sails through and only fails later, mid-conversation.
+  if (useOpenAI && openAIBaseURL && openAIModel) {
+    for (;;) {
+      console.log(`${c.dim}Checking ${openAIModel} with a one-token request ...${c.reset}`);
+      const check = await verifyBackend({ baseURL: openAIBaseURL, apiKey: openAIKey, model: openAIModel });
+      if (check.ok) {
+        console.log(`${c.green}✓${c.reset} backend works`);
+        break;
+      }
+      console.log(`${c.red}✗${c.reset} ${check.message}`);
+      if (check.kind !== "auth") break; // only a bad key is worth retrying here
+      const retry = (await ask(rl, "Enter a different API key? (blank to keep and continue)", "")).trim();
+      if (!retry) break;
+      openAIKey = retry;
     }
   }
 

@@ -61,12 +61,32 @@ async function callOpenAI(
   });
 
   if (!upstream.ok) {
-    // Surface the upstream error verbatim so the CLI shows something useful.
+    // Wrap the upstream error in Anthropic's envelope so the CLI renders our
+    // message instead of a bare `API Error: 401 {"error":"Unauthorized"}` —
+    // which reads as *Claude Code's* login failing rather than the backend
+    // refusing OPENAI_API_KEY. The original body is preserved inside.
     const text = await upstream.text();
-    return new Response(text, {
-      status: upstream.status,
-      headers: { "content-type": "application/json" },
-    });
+    const auth = upstream.status === 401 || upstream.status === 403;
+    if (auth) {
+      console.error(
+        `[error] ${cfg.openAIBaseURL} rejected OPENAI_API_KEY (${upstream.status}). ` +
+          `This is your backend key, not Claude Code's login. ` +
+          `Re-run 'claude-code-free --setup' or fix the key in your .env.`,
+      );
+    }
+    const message = auth
+      ? `Your backend rejected the request (${upstream.status}). ${cfg.openAIBaseURL} refused OPENAI_API_KEY — ` +
+        `this is not a Claude Code login problem. Run 'claude-code-free --doctor' to check the config. ` +
+        `Upstream said: ${text.slice(0, 300)}`
+      : `Backend ${cfg.openAIBaseURL} returned ${upstream.status}: ${text.slice(0, 300)}`;
+
+    return new Response(
+      JSON.stringify({
+        type: "error",
+        error: { type: auth ? "authentication_error" : "api_error", message },
+      }),
+      { status: upstream.status, headers: { "content-type": "application/json" } },
+    );
   }
 
   if (openaiReq.stream) {
