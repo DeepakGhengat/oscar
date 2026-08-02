@@ -95,7 +95,7 @@ try {
   # key so the claude CLI skips its OAuth login gate. In passthrough mode,
   # leave the real key alone (user must authenticate normally).
   if ($env:USE_OPENAI_API -eq "1") {
-    $env:ANTHROPIC_API_KEY = "oscar-dummy-key"
+    $env:ANTHROPIC_API_KEY = "claude-code-free-dummy-key"
     # Make backend models appear in /model: claude only fetches
     # $ANTHROPIC_BASE_URL/v1/models for the picker when this is set.
     $env:CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1"
@@ -107,7 +107,7 @@ try {
     # real profile so the user's normal auth / settings apply).
     # Same location the Node launcher uses, so both entry points share one
     # clean profile instead of drifting apart.
-    $CleanConfig = Join-Path $env:USERPROFILE ".oscar\claude-config"
+    $CleanConfig = Join-Path $env:USERPROFILE ".claude-code-free\claude-config"
     if (-not (Test-Path $CleanConfig)) { New-Item -ItemType Directory -Path $CleanConfig -Force | Out-Null }
     $env:CLAUDE_CONFIG_DIR = $CleanConfig
   }

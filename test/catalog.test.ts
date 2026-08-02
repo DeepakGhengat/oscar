@@ -1,7 +1,7 @@
 // Alias layer that makes backend models selectable from Claude Code's /model.
 // Claude Code drops any discovered model id that doesn't match
 // /^(claude|anthropic)/i, so every backend id is advertised under a
-// `claude-oscar-…` alias and mapped back on the way in.
+// `claude-ccf-…` alias and mapped back on the way in.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

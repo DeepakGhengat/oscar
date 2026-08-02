@@ -11,12 +11,12 @@
 //
 // So a raw Ollama id like `glm-5.2:cloud` is dropped on the floor. To make
 // every backend model selectable from `/model`, we advertise each one under a
-// `claude-oscar-…` alias and keep the real name in `display_name` (which is what
+// `claude-ccf-…` alias and keep the real name in `display_name` (which is what
 // the picker actually renders). When the CLI later sends the alias back as
 // `body.model`, `toBackendModel()` maps it to the real provider + model.
 //
 // With several providers configured the alias carries the provider too
-// (`claude-oscar-local-qwen2.5-7b`), so one picker spans every backend. A
+// (`claude-ccf-local-qwen2.5-7b`), so one picker spans every backend. A
 // single flat OPENAI_* config keeps the original provider-less alias shape.
 //
 // The catalog is probed lazily and cached briefly so /model hot-swaps and
@@ -31,7 +31,7 @@ import {
   type Provider,
 } from "./providers.ts";
 
-export const ALIAS_PREFIX = "claude-oscar-";
+export const ALIAS_PREFIX = "claude-ccf-";
 
 /** Models that can't serve chat completions and only clutter the picker. */
 const NON_CHAT = /(?:^|[-_/])(?:embed|embedding|rerank|reranker)(?:$|[-_:/.])/i;
@@ -39,7 +39,7 @@ const NON_CHAT = /(?:^|[-_/])(?:embed|embedding|rerank|reranker)(?:$|[-_:/.])/i;
 export interface CatalogEntry {
   /** Real backend id, e.g. `glm-5.2:cloud`. */
   id: string;
-  /** Alias advertised to Claude Code, e.g. `claude-oscar-cloud-glm-5.2`. */
+  /** Alias advertised to Claude Code, e.g. `claude-ccf-cloud-glm-5.2`. */
   alias: string;
   /** Which backend serves it. */
   provider: Provider;

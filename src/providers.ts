@@ -42,7 +42,7 @@ export interface Provider {
 
 /** Where providers.json lives: beside the .env the rest of the tool uses. */
 export function providersFilePath(): string {
-  const dir = process.env.OSCAR_CONFIG;
+  const dir = process.env.CLAUDE_CODE_FREE_CONFIG;
   return dir ? join(resolve(dir), "providers.json") : resolve("providers.json");
 }
 

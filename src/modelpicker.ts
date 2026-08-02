@@ -1,4 +1,4 @@
-// `oscar --model`: list models from the configured backend and
+// `claude-code-free --model`: list models from the configured backend and
 // switch OPENAI_MODEL in the .env without re-running the whole wizard.
 //
 // Unlike OpenClaude (which uses a static provider config), this probes the
@@ -24,7 +24,7 @@ function closeRl(rl: { close: () => void; pause?: () => void }): void {
 import { probeModels } from "./setup.ts";
 
 export function envFilePath(): string {
-  const dir = process.env.OSCAR_CONFIG;
+  const dir = process.env.CLAUDE_CODE_FREE_CONFIG;
   const candidate = dir ? resolve(dir) : resolve(".env");
   // dir -> dir/.env ; file -> file
   if (dir) return join(candidate, ".env");
@@ -78,7 +78,7 @@ export async function runModelPicker(): Promise<string | null> {
   const file = envFilePath();
   if (!existsSync(file)) {
     console.log(`${c.red}No config found at ${file}.${c.reset}`);
-    console.log(`Run ${c.bold}oscar --setup${c.reset} first.`);
+    console.log(`Run ${c.bold}claude-code-free --setup${c.reset} first.`);
     return null;
   }
 
@@ -104,7 +104,7 @@ export async function runModelPicker(): Promise<string | null> {
 
   if (!models.length) {
     console.log(`${c.yellow}  (could not reach ${baseURL}/models)${c.reset}`);
-    console.log(`  Enter a model name manually, or re-run ${c.bold}oscar --setup${c.reset}.`);
+    console.log(`  Enter a model name manually, or re-run ${c.bold}claude-code-free --setup${c.reset}.`);
     const rl = createInterface({ input, output });
     const manual = (await rl.question(`${c.bold}Model name${c.reset} [${c.gray}cancel=Enter${c.reset}]: `)).trim();
     closeRl(rl);

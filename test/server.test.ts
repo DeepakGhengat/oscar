@@ -102,7 +102,7 @@ before(async () => {
   });
   const anthropicPort = await listen(anthropic);
 
-  configDir = mkdtempSync(join(tmpdir(), "oscar-server-"));
+  configDir = mkdtempSync(join(tmpdir(), "ccf-server-"));
   writeFileSync(
     join(configDir, ".env"),
     [
@@ -120,14 +120,14 @@ before(async () => {
     stdio: "ignore",
     env: {
       ...process.env,
-      OSCAR_CONFIG: configDir,
+      CLAUDE_CODE_FREE_CONFIG: configDir,
       PROXY_PORT: String(proxyPort),
       USE_OPENAI_API: "1",
       OPENAI_API_KEY: "sk-test",
       OPENAI_MODEL: "qwen2.5:7b",
       OPENAI_BASE_URL: `http://localhost:${backendPort}/v1`,
       ANTHROPIC_REAL_BASE_URL: `http://localhost:${anthropicPort}`,
-      OSCAR_MAX_OUTPUT_TOKENS: "",
+      CCF_MAX_OUTPUT_TOKENS: "",
     },
   });
   await waitForHealth(proxyPort);
@@ -244,16 +244,16 @@ test("a picked alias overrides OPENAI_MODEL for that request", async () => {
 
 /* --------------------------- control endpoints ---------------------------- */
 
-test("GET /_oscar/status reports the current model with the key redacted", async () => {
-  const r = await fetch(url("/_oscar/status"));
+test("GET /_ccf/status reports the current model with the key redacted", async () => {
+  const r = await fetch(url("/_ccf/status"));
   assert.equal(r.status, 200);
   const body = (await r.json()) as { openaiModel: string; openaiKey: string };
   assert.equal(body.openaiModel, "qwen2.5:7b");
   assert.ok(!body.openaiKey.includes("sk-test"), "the full key must not be echoed back");
 });
 
-test("GET /_oscar/models lists raw backend ids, sorted", async () => {
-  const r = await fetch(url("/_oscar/models"));
+test("GET /_ccf/models lists raw backend ids, sorted", async () => {
+  const r = await fetch(url("/_ccf/models"));
   assert.equal(r.status, 200);
   const body = (await r.json()) as { current: string; models: string[] };
   assert.equal(body.current, "qwen2.5:7b");
@@ -261,8 +261,8 @@ test("GET /_oscar/models lists raw backend ids, sorted", async () => {
   assert.ok(body.models.includes("glm-5.2:cloud"));
 });
 
-test("POST /_oscar/model hot-swaps the model and persists it", async () => {
-  const r = await fetch(url("/_oscar/model"), {
+test("POST /_ccf/model hot-swaps the model and persists it", async () => {
+  const r = await fetch(url("/_ccf/model"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ model: "glm-5.2:cloud" }),
@@ -271,7 +271,7 @@ test("POST /_oscar/model hot-swaps the model and persists it", async () => {
   assert.deepEqual(await r.json(), { ok: true, openaiModel: "glm-5.2:cloud" });
 
   // Visible to the running proxy without a restart...
-  const status = (await (await fetch(url("/_oscar/status"))).json()) as { openaiModel: string };
+  const status = (await (await fetch(url("/_ccf/status"))).json()) as { openaiModel: string };
   assert.equal(status.openaiModel, "glm-5.2:cloud");
 
   // ...and written through to .env so it survives one.
@@ -287,29 +287,29 @@ test("POST /_oscar/model hot-swaps the model and persists it", async () => {
   assert.equal(body.content[0]!.text, "glm-5.2:cloud");
 
   // Restore for any later test.
-  await fetch(url("/_oscar/model"), {
+  await fetch(url("/_ccf/model"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ model: "qwen2.5:7b" }),
   });
 });
 
-test("POST /_oscar/model validates its input", async () => {
-  const missing = await fetch(url("/_oscar/model"), {
+test("POST /_ccf/model validates its input", async () => {
+  const missing = await fetch(url("/_ccf/model"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({}),
   });
   assert.equal(missing.status, 400);
 
-  const blank = await fetch(url("/_oscar/model"), {
+  const blank = await fetch(url("/_ccf/model"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ model: "   " }),
   });
   assert.equal(blank.status, 400);
 
-  const bad = await fetch(url("/_oscar/model"), {
+  const bad = await fetch(url("/_ccf/model"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: "{oops",
@@ -317,9 +317,9 @@ test("POST /_oscar/model validates its input", async () => {
   assert.equal(bad.status, 400);
 });
 
-test("an unknown /_oscar/ endpoint 404s instead of falling through to Anthropic", async () => {
+test("an unknown /_ccf/ endpoint 404s instead of falling through to Anthropic", async () => {
   anthropicHits = [];
-  const r = await fetch(url("/_oscar/nope"));
+  const r = await fetch(url("/_ccf/nope"));
   assert.equal(r.status, 404);
   assert.deepEqual(anthropicHits, []);
 });

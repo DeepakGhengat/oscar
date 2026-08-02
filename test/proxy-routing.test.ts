@@ -12,7 +12,7 @@ const KEYS = [
   "OPENAI_API_KEY",
   "OPENAI_MODEL",
   "OPENAI_BASE_URL",
-  "OSCAR_MAX_OUTPUT_TOKENS",
+  "CCF_MAX_OUTPUT_TOKENS",
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_BASE_URL",
   "ANTHROPIC_REAL_BASE_URL",
@@ -125,21 +125,21 @@ test("an Anthropic tier id falls back to OPENAI_MODEL", async () => {
 
 test("an advertised alias overrides OPENAI_MODEL", async () => {
   await useBackend();
-  const r = await routeMessageRequest(body("claude-oscar-glm-5.2-cloud"), new Headers());
+  const r = await routeMessageRequest(body("claude-ccf-glm-5.2-cloud"), new Headers());
   assert.equal(r.upstreamModel, "glm-5.2:cloud");
   assert.equal(lastUpstream!.model, "glm-5.2:cloud");
 });
 
 test("an alias for an unknown model falls back rather than 404ing upstream", async () => {
   await useBackend();
-  const r = await routeMessageRequest(body("claude-oscar-model-that-left"), new Headers());
+  const r = await routeMessageRequest(body("claude-ccf-model-that-left"), new Headers());
   assert.equal(r.upstreamModel, "qwen2.5:7b");
 });
 
 test("the reported incoming model is what the caller sent", async () => {
   await useBackend();
-  const r = await routeMessageRequest(body("claude-oscar-glm-5.2-cloud"), new Headers());
-  assert.equal(r.incomingModel, "claude-oscar-glm-5.2-cloud");
+  const r = await routeMessageRequest(body("claude-ccf-glm-5.2-cloud"), new Headers());
+  assert.equal(r.incomingModel, "claude-ccf-glm-5.2-cloud");
 });
 
 test("routing still works when the model list is unreachable", async () => {
@@ -168,9 +168,9 @@ test("routing still works when the model list is unreachable", async () => {
 
 /* ------------------------------- clamping --------------------------------- */
 
-test("OSCAR_MAX_OUTPUT_TOKENS reaches the upstream request", async () => {
+test("CCF_MAX_OUTPUT_TOKENS reaches the upstream request", async () => {
   await useBackend();
-  process.env.OSCAR_MAX_OUTPUT_TOKENS = "64";
+  process.env.CCF_MAX_OUTPUT_TOKENS = "64";
   await routeMessageRequest(body("claude-sonnet-4-5", { max_tokens: 32000 }), new Headers());
   assert.equal(lastUpstream!.max_tokens, 64);
   assert.equal(lastUpstream!.max_completion_tokens, 64);

@@ -1,9 +1,9 @@
 ---
-name: oscar
+name: claude-code-free
 description: Route Anthropic Claude Code requests to any OpenAI-compatible backend via a local translation proxy.
 ---
 
-# O.S.C.A.R.
+# claude-code-free
 
 A local proxy that translates Anthropic Messages API requests (`/v1/messages`)
 into OpenAI Chat Completions requests (`/v1/chat/completions`) so the Claude Code

@@ -116,7 +116,7 @@ test("content_filter and null finish_reason degrade to end_turn", () => {
 
 test("the response echoes the model the caller asked for", () => {
   // Claude Code matches this against what it requested.
-  assert.equal(translateOpenAIResponse(response(), "claude-oscar-glm-5.2-cloud").model, "claude-oscar-glm-5.2-cloud");
+  assert.equal(translateOpenAIResponse(response(), "claude-ccf-glm-5.2-cloud").model, "claude-ccf-glm-5.2-cloud");
 });
 
 test("a missing response id is replaced with a generated one", () => {

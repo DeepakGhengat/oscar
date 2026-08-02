@@ -1,5 +1,5 @@
 ---
-description: Start the oscar proxy and launch the Claude Code CLI against it.
+description: Start the claude-code-free proxy and launch the Claude Code CLI against it.
 ---
 
 # Run Free

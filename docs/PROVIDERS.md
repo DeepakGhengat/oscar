@@ -4,9 +4,9 @@ Configuring one backend, several backends, and the per-model knobs.
 
 ---
 
-## One backend — `~/.oscar/.env`
+## One backend — `~/.claude-code-free/.env`
 
-Written by `oscar --setup`, editable by hand:
+Written by `claude-code-free --setup`, editable by hand:
 
 ```bash
 USE_OPENAI_API=1
@@ -17,10 +17,10 @@ PROXY_PORT=8787
 ```
 
 Setting `USE_OPENAI_API` to anything other than `1`/`true`/`yes`/`on` puts
-O.S.C.A.R. in passthrough mode: every request goes to the real Anthropic API
+claude-code-free in passthrough mode: every request goes to the real Anthropic API
 untouched, using `ANTHROPIC_API_KEY`.
 
-## Several backends — `~/.oscar/providers.json`
+## Several backends — `~/.claude-code-free/providers.json`
 
 ```json
 {
@@ -80,7 +80,7 @@ is named in the startup log:
 [warn] provider "cloud" did not answer /models — it will be missing from /model
 ```
 
-If `providers.json` is unparseable, O.S.C.A.R. falls back to the flat `.env`.
+If `providers.json` is unparseable, claude-code-free falls back to the flat `.env`.
 
 ---
 
@@ -92,7 +92,7 @@ backends either reject that outright or silently truncate mid-answer.
 Ceilings resolve most-specific-first:
 
 ```
-models[<model>].maxOutputTokens   →   provider.maxOutputTokens   →   OSCAR_MAX_OUTPUT_TOKENS
+models[<model>].maxOutputTokens   →   provider.maxOutputTokens   →   CCF_MAX_OUTPUT_TOKENS
 ```
 
 So a 4k local model and a 128k hosted one can coexist:
@@ -133,7 +133,7 @@ They differ, and it matters:
 | Model id | `glm-5.2:cloud` | `glm-5.2` |
 
 Putting the local-style name in a cloud config produces a confusing failure.
-`oscar --doctor` reports the closest match when it spots one.
+`claude-code-free --doctor` reports the closest match when it spots one.
 
 ---
 
@@ -142,8 +142,8 @@ Putting the local-style name in a cloud config produces a confusing failure.
 | Method | Scope | Restart? |
 |---|---|---|
 | `/model` inside Claude Code | that session | no |
-| `oscar --switch` | the running proxy, from another terminal | no |
-| `oscar --model` | rewrites `.env` | yes |
+| `claude-code-free --switch` | the running proxy, from another terminal | no |
+| `claude-code-free --model` | rewrites `.env` | yes |
 
 `/model` is the one you'll use. The other two exist for scripting and for
 changing the default a fresh session starts with.
@@ -153,7 +153,7 @@ changing the default a fresh session starts with.
 ## Verifying
 
 ```bash
-oscar --doctor
+claude-code-free --doctor
 ```
 
 With several providers it checks each one separately, and always ends with a

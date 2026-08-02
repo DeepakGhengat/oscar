@@ -1,4 +1,4 @@
-// Interactive setup wizard for oscar.
+// Interactive setup wizard for claude-code-free.
 // Pure helpers are exported for testing; main() runs the interactive loop.
 
 export type ProviderId =
@@ -35,7 +35,7 @@ export interface SetupConfig {
 /** Serialize a SetupConfig to .env text. */
 export function formatEnv(cfg: SetupConfig): string {
   const lines: string[] = [];
-  lines.push(`# oscar config — written by src/setup.ts`);
+  lines.push(`# claude-code-free config — written by src/setup.ts`);
   lines.push(`PROXY_PORT=${cfg.port}`);
   if (cfg.useOpenAI) {
     lines.push(`USE_OPENAI_API=1`);
@@ -112,7 +112,7 @@ async function askRequired(rl: ReturnType<typeof createInterface>, q: string): P
 
 export async function main(): Promise<void> {
   const rl = createInterface({ input, output });
-  console.log(banner("O.S.C.A.R. setup", "Orchestrator for System Coding & Autonomous Routing"));
+  console.log(banner("claude-code-free setup", "Pick a backend, probe its models, write .env"));
 
   const providerOptions: SelectOption[] = PROVIDER_PRESETS.map((p) => ({
     label: p.label,
@@ -192,10 +192,10 @@ export async function main(): Promise<void> {
 
   const write = (await ask(rl, "Write .env?", "Y")).toLowerCase();
   if (write.startsWith("y") || write === "") {
-    // Global install: config lives at $OSCAR_CONFIG (set by the
-    // bin launcher, typically ~/.oscar/.env). Local dev: write to
+    // Global install: config lives at $CLAUDE_CODE_FREE_CONFIG (set by the
+    // bin launcher, typically ~/.claude-code-free/.env). Local dev: write to
     // the project root .env.
-    const dir = process.env.OSCAR_CONFIG;
+    const dir = process.env.CLAUDE_CODE_FREE_CONFIG;
     const envPath = dir ? resolve(dir, ".env") : resolve(".env");
     if (dir) mkdirSync(dir, { recursive: true });
     writeFileSync(envPath, formatEnv(cfg));
@@ -206,14 +206,14 @@ export async function main(): Promise<void> {
     return;
   }
 
-  const start = (await ask(rl, "Start oscar now?", "Y")).toLowerCase();
+  const start = (await ask(rl, "Start claude-code-free now?", "Y")).toLowerCase();
   closeRl(rl);
   if (start.startsWith("y") || start === "") {
-    console.log(`\n${c.dim}Run again anytime with: oscar${c.reset}`);
-    console.log(`${c.dim}Switch models with:      oscar --model${c.reset}`);
+    console.log(`\n${c.dim}Run again anytime with: claude-code-free${c.reset}`);
+    console.log(`${c.dim}Switch models with:      claude-code-free --model${c.reset}`);
   } else {
-    console.log(`\n${c.dim}Done. Run with: oscar${c.reset}`);
-    console.log(`${c.dim}Switch models with: oscar --model${c.reset}`);
+    console.log(`\n${c.dim}Done. Run with: claude-code-free${c.reset}`);
+    console.log(`${c.dim}Switch models with: claude-code-free --model${c.reset}`);
   }
 }
 
