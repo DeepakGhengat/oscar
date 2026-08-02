@@ -20,9 +20,13 @@ beforeEach(() => {
 afterEach(() => {
   process.chdir(prevCwd);
   // Windows can hold a transient handle on the directory we just chdir'd out
-  // of, so rmSync intermittently throws EPERM. Retry, and treat a leftover
-  // temp dir as cosmetic rather than failing the run.
-  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  // of, so rmSync intermittently throws EPERM even with retries. A leftover
+  // temp dir is cosmetic — it must never fail an otherwise-passing run.
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  } catch {
+    /* the OS will reclaim it */
+  }
 });
 
 test("loadConfig picks up .env in cwd for unset keys", async () => {

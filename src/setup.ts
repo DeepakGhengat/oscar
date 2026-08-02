@@ -49,14 +49,19 @@ export function formatEnv(cfg: SetupConfig): string {
   return lines.join("\n") + "\n";
 }
 
-/** Probe an OpenAI-compatible /models endpoint. Returns [] on any failure/timeout. */
+/** Probe an OpenAI-compatible /models endpoint. Returns [] on any failure/timeout.
+ *
+ * `timeoutMs` matters: 2s is fine for a warm local server but can cut off a
+ * remote backend's first request, where DNS and the TLS handshake land before
+ * any response. Callers that can afford to wait should ask for more. */
 export async function probeModels(
   baseURL: string,
   fetchImpl: typeof fetch = fetch,
+  timeoutMs = 2000,
 ): Promise<string[]> {
   try {
     const res = await fetchImpl(`${baseURL.replace(/\/$/, "")}/models`, {
-      signal: AbortSignal.timeout(2000),
+      signal: AbortSignal.timeout(timeoutMs),
       headers: { "content-type": "application/json" },
     });
     if (!res.ok) return [];

@@ -10,6 +10,7 @@ import { c } from "./ui.ts";
 import { envFilePath } from "./modelpicker.ts";
 import { probeModels } from "./setup.ts";
 import { isPlaceholderKey, isRemoteBackend, verifyBackend } from "./preflight.ts";
+import { loadProviders } from "./providers.ts";
 
 const PASS = `${c.green}✓${c.reset}`;
 const FAIL = `${c.red}✗${c.reset}`;
@@ -50,63 +51,95 @@ export async function runDoctor(): Promise<boolean> {
     return true;
   }
 
-  const baseURL = (env.OPENAI_BASE_URL ?? "").replace(/\/$/, "");
-  const key = env.OPENAI_API_KEY ?? "";
-  const model = env.OPENAI_MODEL ?? "";
+  const defaultModel = env.OPENAI_MODEL ?? "";
   let ok = true;
 
-  for (const [name, value] of [["OPENAI_BASE_URL", baseURL], ["OPENAI_MODEL", model]] as const) {
-    if (!value) {
-      console.log(`${FAIL} ${name} is not set`);
-      ok = false;
-    }
-  }
-  if (!ok) return false;
-  console.log(`${PASS} backend: ${baseURL}`);
-  console.log(`${PASS} model:   ${model}`);
-
-  // A placeholder key is fine for a local server, fatal for a hosted one.
-  if (isPlaceholderKey(key)) {
-    if (isRemoteBackend(baseURL)) {
-      console.log(
-        `${FAIL} OPENAI_API_KEY is the placeholder ${JSON.stringify(key)}, but ${baseURL} is a hosted backend that needs a real key`,
-      );
-      ok = false;
-    } else {
-      console.log(`${PASS} key: placeholder, which is fine for a local backend`);
-    }
-  } else {
-    console.log(`${PASS} key: set (${key.slice(0, 4)}...)`);
-  }
-
-  // Model listing — note explicitly that passing proves little.
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (key) headers.authorization = `Bearer ${key}`;
-  const ids = await probeModels(baseURL, (url, init) =>
-    fetch(url, { ...init, headers: { ...headers, ...((init?.headers as Record<string, string>) ?? {}) } } as RequestInit),
-  );
-  if (ids.length) {
-    console.log(`${PASS} /models lists ${ids.length} model(s) ${c.dim}(often public — proves reachability, not auth)${c.reset}`);
-    if (!ids.includes(model)) {
-      console.log(`${WARN} ${JSON.stringify(model)} is not in that list — closest: ${nearest(model, ids).join(", ") || "(none)"}`);
-    }
-  } else {
-    console.log(`${WARN} /models returned nothing — the picker in /model will be empty`);
-  }
-
-  // The check that actually means something.
-  const result = await verifyBackend({ baseURL, apiKey: key || null, model });
-  if (result.ok) {
-    console.log(`${PASS} live completion succeeded — the backend works`);
-  } else {
-    console.log(`${FAIL} live completion failed: ${result.message}`);
-    if (result.kind === "auth") {
-      console.log(`  ${c.dim}Get a real key for ${baseURL} and set OPENAI_API_KEY in ${file}.${c.reset}`);
-    } else if (result.kind === "model") {
-      console.log(`  ${c.dim}Pick a served model with: claude-code-free --model${c.reset}`);
-    }
+  // The provider list is whatever the proxy itself would use: providers.json
+  // when present, else the flat OPENAI_* config as a single "default".
+  const { providers, errors } = loadProviders({
+    useOpenAI: true,
+    openAIKey: env.OPENAI_API_KEY ?? null,
+    openAIModel: defaultModel || null,
+    openAIBaseURL: (env.OPENAI_BASE_URL ?? "").replace(/\/$/, ""),
+    maxOutputTokens: null,
+    anthropicKey: null,
+    anthropicBaseURL: "https://api.anthropic.com",
+    port: Number(env.PROXY_PORT ?? 8787),
+  });
+  for (const e of errors) {
+    console.log(`${FAIL} ${e}`);
     ok = false;
   }
+  if (providers.length > 1) console.log(`${PASS} ${providers.length} providers configured`);
+
+  for (const p of providers) {
+    const label = providers.length > 1 ? `[${p.id}] ` : "";
+    console.log(`\n${c.bold}${label}${p.baseURL}${c.reset}`);
+
+    if (!p.baseURL) {
+      console.log(`${FAIL} ${label}no baseURL`);
+      ok = false;
+      continue;
+    }
+
+    // A placeholder key is fine for a local server, fatal for a hosted one.
+    if (isPlaceholderKey(p.apiKey)) {
+      if (isRemoteBackend(p.baseURL)) {
+        console.log(
+          `${FAIL} key is the placeholder ${JSON.stringify(p.apiKey ?? "")}, but this is a hosted backend that needs a real one`,
+        );
+        ok = false;
+      } else {
+        console.log(`${PASS} key: placeholder, fine for a local backend`);
+      }
+    } else {
+      console.log(`${PASS} key: set (${(p.apiKey ?? "").slice(0, 4)}...)`);
+    }
+
+    // Model listing — note explicitly that passing proves little.
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (p.apiKey) headers.authorization = `Bearer ${p.apiKey}`;
+    const ids = await probeModels(
+      p.baseURL,
+      (url, init) =>
+        fetch(url, { ...init, headers: { ...headers, ...((init?.headers as Record<string, string>) ?? {}) } } as RequestInit),
+      10_000,
+    );
+    if (!ids.length) {
+      console.log(`${WARN} /models returned nothing — this backend contributes nothing to /model`);
+      ok = false;
+      continue;
+    }
+    console.log(`${PASS} /models lists ${ids.length} model(s) ${c.dim}(often public — proves reachability, not auth)${c.reset}`);
+
+    // Which model to test: the configured default if this backend serves it,
+    // else whatever it does serve.
+    let model = defaultModel;
+    if (!ids.includes(model)) {
+      if (providers.length === 1) {
+        console.log(
+          `${WARN} ${JSON.stringify(model)} is not served here — closest: ${nearest(model, ids).join(", ") || "(none)"}`,
+        );
+        ok = false;
+      }
+      model = ids[0]!;
+    }
+
+    // The check that actually means something.
+    const result = await verifyBackend({ baseURL: p.baseURL, apiKey: p.apiKey, model });
+    if (result.ok) {
+      console.log(`${PASS} live completion with ${model} succeeded`);
+    } else {
+      console.log(`${FAIL} live completion failed: ${result.message}`);
+      if (result.kind === "auth") {
+        console.log(`  ${c.dim}Set a real key for ${p.baseURL} in ${providers.length > 1 ? "providers.json" : file}.${c.reset}`);
+      } else if (result.kind === "model") {
+        console.log(`  ${c.dim}Pick a served model with: claude-code-free --model${c.reset}`);
+      }
+      ok = false;
+    }
+  }
+  console.log("");
 
   console.log(
     ok ? `\n${c.green}All checks passed.${c.reset}` : `\n${c.red}Some checks failed — see above.${c.reset}`,

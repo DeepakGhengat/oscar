@@ -104,6 +104,34 @@ claude-code-free --model    # pick a model, write it to .env, then relaunch
 claude-code-free --switch   # hot-swap a *running* proxy from a second terminal
 ```
 
+## Several backends at once
+
+Drop a `providers.json` beside your `.env` and every backend is probed
+together, appearing in one `/model` picker:
+
+```json
+{
+  "providers": {
+    "local": { "baseURL": "http://localhost:11434/v1", "apiKey": "ollama" },
+    "cloud": { "baseURL": "https://ollama.com/v1", "apiKey": "sk-..." },
+    "deep":  { "baseURL": "https://api.deepseek.com/v1", "apiKey": "sk-...",
+               "maxOutputTokens": 8192,
+               "models": { "deepseek-chat": { "maxOutputTokens": 4096 } } }
+  }
+}
+```
+
+`/model` then lists `qwen2.5:7b  (local)`, `glm-5.2  (cloud)`, and so on —
+switchable mid-session, each request using that provider's own key and
+base URL. Two backends serving the same model name stay distinct.
+
+Output-token ceilings resolve **model → provider → `CCF_MAX_OUTPUT_TOKENS`**,
+so a small local model can be capped without touching the others.
+
+Without a `providers.json` nothing changes: the flat `OPENAI_*` config is used
+as a single provider, and aliases keep their original provider-less shape so
+anything Claude Code already cached still resolves.
+
 ## Checking your setup
 
 ```bash

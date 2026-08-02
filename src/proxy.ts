@@ -11,32 +11,57 @@ import type {
 } from "./types.ts";
 import { loadConfig } from "./env.ts";
 import { getCatalog, toBackendModel } from "./catalog.ts";
+import {
+  DEFAULT_PROVIDER,
+  loadProviders,
+  resolveMaxOutputTokens,
+  type Provider,
+} from "./providers.ts";
 
 const ANTHROPIC_VERSION = "2023-06-01";
 
-/** Resolve the upstream model.
+/** Where a request is actually going: which backend, under which name. */
+interface Target {
+  provider: Provider;
+  model: string;
+  maxOutputTokens: number | null;
+}
+
+/** Resolve the upstream target.
  *
  * When the user picks a backend model from `/model`, Claude Code sends the id
  * we advertised through gateway discovery (a `claude-ccf-…` alias) as
- * `body.model`. Map that back to the real backend name. Anything else — the
- * usual case, where the body carries an Anthropic tier id — falls back to the
- * configured OPENAI_MODEL. */
-async function resolveUpstreamModel(
+ * `body.model`. Map that back to the real provider + model. Anything else —
+ * the usual case, where the body carries an Anthropic tier id — falls back to
+ * the default provider and OPENAI_MODEL. */
+async function resolveTarget(
   cfg: ProxyConfig,
   bodyModel: string | undefined,
-): Promise<string | null> {
+): Promise<Target> {
   if (bodyModel) {
-    const catalog = await getCatalog(cfg);
-    const backend = toBackendModel(catalog, bodyModel);
-    if (backend) return backend;
+    const entry = toBackendModel(await getCatalog(cfg), bodyModel);
+    if (entry) {
+      return {
+        provider: entry.provider,
+        model: entry.id,
+        maxOutputTokens: resolveMaxOutputTokens(entry.provider, entry.id, cfg.maxOutputTokens),
+      };
+    }
   }
-  return cfg.openAIModel ?? bodyModel ?? null;
+
+  const { providers } = loadProviders(cfg);
+  const provider =
+    providers.find((p) => p.id === DEFAULT_PROVIDER) ??
+    providers[0] ?? { id: DEFAULT_PROVIDER, baseURL: cfg.openAIBaseURL, apiKey: cfg.openAIKey };
+  const model = cfg.openAIModel ?? bodyModel ?? "";
+  return {
+    provider,
+    model,
+    maxOutputTokens: resolveMaxOutputTokens(provider, model, cfg.maxOutputTokens),
+  };
 }
 
-function authHeaders(cfg: ProxyConfig, target: "openai" | "anthropic"): Record<string, string> {
-  if (target === "openai") {
-    return { Authorization: `Bearer ${cfg.openAIKey ?? ""}` };
-  }
+function anthropicAuthHeaders(cfg: ProxyConfig): Record<string, string> {
   return {
     "x-api-key": cfg.anthropicKey ?? "",
     "anthropic-version": ANTHROPIC_VERSION,
@@ -47,16 +72,19 @@ function authHeaders(cfg: ProxyConfig, target: "openai" | "anthropic"): Record<s
 /* --------------------------- OpenAI routing ------------------------------- */
 
 async function callOpenAI(
-  cfg: ProxyConfig,
   body: AnthropicMessagesRequest,
-  upstreamModel: string,
+  target: Target,
 ): Promise<Response> {
-  const openaiReq = buildOpenAIRequest(body, upstreamModel, cfg.maxOutputTokens);
-  const url = `${cfg.openAIBaseURL}/chat/completions`;
+  const { provider } = target;
+  const openaiReq = buildOpenAIRequest(body, target.model, target.maxOutputTokens);
+  const url = `${provider.baseURL}/chat/completions`;
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (provider.apiKey) headers.Authorization = `Bearer ${provider.apiKey}`;
 
   const upstream = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders(cfg, "openai") },
+    headers,
     body: JSON.stringify(openaiReq),
   });
 
@@ -64,21 +92,22 @@ async function callOpenAI(
     // Wrap the upstream error in Anthropic's envelope so the CLI renders our
     // message instead of a bare `API Error: 401 {"error":"Unauthorized"}` —
     // which reads as *Claude Code's* login failing rather than the backend
-    // refusing OPENAI_API_KEY. The original body is preserved inside.
+    // refusing its key. The original body is preserved inside.
     const text = await upstream.text();
     const auth = upstream.status === 401 || upstream.status === 403;
+    const who = `${provider.baseURL} (provider "${provider.id}")`;
     if (auth) {
       console.error(
-        `[error] ${cfg.openAIBaseURL} rejected OPENAI_API_KEY (${upstream.status}). ` +
+        `[error] ${who} rejected the API key (${upstream.status}). ` +
           `This is your backend key, not Claude Code's login. ` +
-          `Re-run 'claude-code-free --setup' or fix the key in your .env.`,
+          `Run 'claude-code-free --doctor' to check the config.`,
       );
     }
     const message = auth
-      ? `Your backend rejected the request (${upstream.status}). ${cfg.openAIBaseURL} refused OPENAI_API_KEY — ` +
+      ? `Your backend rejected the request (${upstream.status}). ${who} refused the API key — ` +
         `this is not a Claude Code login problem. Run 'claude-code-free --doctor' to check the config. ` +
         `Upstream said: ${text.slice(0, 300)}`
-      : `Backend ${cfg.openAIBaseURL} returned ${upstream.status}: ${text.slice(0, 300)}`;
+      : `Backend ${who} returned ${upstream.status}: ${text.slice(0, 300)}`;
 
     return new Response(
       JSON.stringify({
@@ -90,7 +119,7 @@ async function callOpenAI(
   }
 
   if (openaiReq.stream) {
-    return streamFromOpenAI(upstream, upstreamModel);
+    return streamFromOpenAI(upstream, target.model);
   }
 
   const json = (await upstream.json()) as OpenAIChatCompletionResponse;
@@ -188,7 +217,7 @@ async function passthroughAnthropic(
     outHeaders.set(k, v);
   }
   // Ensure auth headers are correct even if the CLI omitted them.
-  for (const [k, v] of Object.entries(authHeaders(cfg, "anthropic"))) outHeaders.set(k, v);
+  for (const [k, v] of Object.entries(anthropicAuthHeaders(cfg))) outHeaders.set(k, v);
   if (!outHeaders.has("content-type")) outHeaders.set("content-type", "application/json");
 
   const init: RequestInit = { method, headers: outHeaders };
@@ -211,6 +240,8 @@ export interface RouteResult {
   route: "openai" | "anthropic" | "passthrough";
   incomingModel?: string;
   upstreamModel?: string;
+  /** Which configured backend served it — for the request log. */
+  provider?: string;
 }
 
 export async function routeMessageRequest(
@@ -221,9 +252,15 @@ export async function routeMessageRequest(
   const parsed = body ? (JSON.parse(typeof body === "string" ? body : new TextDecoder().decode(body)) as AnthropicMessagesRequest) : undefined;
 
   if (cfg.useOpenAI && parsed) {
-    const upstreamModel = (await resolveUpstreamModel(cfg, parsed.model)) ?? parsed.model;
-    const response = await callOpenAI(cfg, parsed, upstreamModel);
-    return { response, route: "openai", incomingModel: parsed.model, upstreamModel };
+    const target = await resolveTarget(cfg, parsed.model);
+    const response = await callOpenAI(parsed, target);
+    return {
+      response,
+      route: "openai",
+      incomingModel: parsed.model,
+      upstreamModel: target.model,
+      provider: target.provider.id,
+    };
   }
   // Passthrough: keep native Anthropic behaviour intact.
   const response = await passthroughAnthropic(cfg, "/v1/messages", "POST", headers, body);

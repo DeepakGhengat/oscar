@@ -112,11 +112,43 @@ test("ANTHROPIC_REAL_BASE_URL wins over ANTHROPIC_BASE_URL", () => {
   process.env.ANTHROPIC_REAL_BASE_URL = "https://api.anthropic.com";
   assert.equal(loadConfig().anthropicBaseURL, "https://api.anthropic.com");
 
-  delete process.env.ANTHROPIC_REAL_BASE_URL;
-  assert.equal(loadConfig().anthropicBaseURL, "http://localhost:8787");
-
   delete process.env.ANTHROPIC_BASE_URL;
   assert.equal(loadConfig().anthropicBaseURL, "https://api.anthropic.com");
+});
+
+test("ANTHROPIC_BASE_URL is used when it points somewhere else", () => {
+  // A genuine alternate Anthropic endpoint (gateway, mock) must be honored.
+  process.env.ANTHROPIC_BASE_URL = "https://gateway.example.com";
+  assert.equal(loadConfig().anthropicBaseURL, "https://gateway.example.com");
+});
+
+test("a base URL pointing back at this proxy is refused", () => {
+  // A stale `ANTHROPIC_BASE_URL=http://localhost:8787` in .env would make
+  // passthrough forward to ourselves and spin. Fall back to real Anthropic.
+  process.env.PROXY_PORT = "8787";
+  for (const self of [
+    "http://localhost:8787",
+    "http://127.0.0.1:8787",
+    "http://[::1]:8787",
+    "http://localhost:8787/",
+  ]) {
+    process.env.ANTHROPIC_BASE_URL = self;
+    assert.equal(loadConfig().anthropicBaseURL, "https://api.anthropic.com", `${self} should be refused`);
+  }
+});
+
+test("the loop guard is port-specific, not host-specific", () => {
+  // Another service on loopback is a legitimate target.
+  process.env.PROXY_PORT = "8787";
+  process.env.ANTHROPIC_BASE_URL = "http://localhost:9999";
+  assert.equal(loadConfig().anthropicBaseURL, "http://localhost:9999");
+});
+
+test("a self-pointing REAL url falls through to the next candidate", () => {
+  process.env.PROXY_PORT = "8787";
+  process.env.ANTHROPIC_REAL_BASE_URL = "http://localhost:8787";
+  process.env.ANTHROPIC_BASE_URL = "https://gateway.example.com";
+  assert.equal(loadConfig().anthropicBaseURL, "https://gateway.example.com");
 });
 
 /* ---------------------------------- port ---------------------------------- */

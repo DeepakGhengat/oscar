@@ -1,12 +1,54 @@
 // getCatalog: the networked half of the catalog — probing, memoisation, and
 // graceful degradation. globalThis.fetch is stubbed so nothing leaves the box.
 
-import { test, beforeEach, afterEach } from "node:test";
+import { test, before, beforeEach, afterEach, after } from "node:test";
 import assert from "node:assert/strict";
-import { clearCatalogCache, getCatalog } from "../src/catalog.ts";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  clearCatalogCache,
+  getCatalog,
+  warmCatalog,
+  PROBE_TIMEOUT_REQUEST_MS,
+  PROBE_TIMEOUT_WARM_MS,
+} from "../src/catalog.ts";
 import type { ProxyConfig } from "../src/types.ts";
 
 const realFetch = globalThis.fetch;
+
+/** How long a partial catalog is cached before a retry. Mirrors src/catalog.ts. */
+const TTL_PARTIAL_MS = 5_000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** A config dir holding a two-provider providers.json, for the tests that need one. */
+let providerDir = "";
+let prevConfigDir: string | undefined;
+
+before(() => {
+  prevConfigDir = process.env.CLAUDE_CODE_FREE_CONFIG;
+  providerDir = mkdtempSync(join(tmpdir(), "ccf-probe-"));
+  writeFileSync(
+    join(providerDir, "providers.json"),
+    JSON.stringify({
+      providers: {
+        local: { baseURL: "http://local/v1", apiKey: "k1" },
+        cloud: { baseURL: "http://cloud/v1", apiKey: "k2" },
+      },
+    }),
+  );
+});
+
+after(() => {
+  if (prevConfigDir === undefined) delete process.env.CLAUDE_CODE_FREE_CONFIG;
+  else process.env.CLAUDE_CODE_FREE_CONFIG = prevConfigDir;
+  try {
+    rmSync(providerDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  } catch {
+    /* cosmetic */
+  }
+});
 
 interface Call {
   url: string;
@@ -54,11 +96,15 @@ const OK = (ids: string[]) => () => ({ ok: true, body: { data: ids.map((id) => (
 beforeEach(() => {
   calls = [];
   clearCatalogCache();
+  // Most tests exercise the flat single-provider path; the multi-provider ones
+  // opt in by pointing at providerDir.
+  delete process.env.CLAUDE_CODE_FREE_CONFIG;
 });
 
 afterEach(() => {
   globalThis.fetch = realFetch;
   clearCatalogCache();
+  delete process.env.CLAUDE_CODE_FREE_CONFIG;
 });
 
 test("getCatalog probes {baseURL}/models and aliases what it finds", async () => {
@@ -151,4 +197,75 @@ test("embedding models are filtered out of the probe result", async () => {
   stubFetch(OK(["nomic-embed-text:v1.5", "qwen2.5:7b"]));
   const c = await getCatalog(cfg());
   assert.deepEqual(c.entries.map((e) => e.id), ["qwen2.5:7b"]);
+});
+
+/* --------------------------- probe budgets -------------------------------- */
+
+test("the request path probes within Claude Code's 3s discovery timeout", async () => {
+  // Claude Code aborts its /v1/models fetch after 3s; anything longer means an
+  // empty picker for the whole session.
+  assert.ok(
+    PROBE_TIMEOUT_REQUEST_MS < 3000,
+    `${PROBE_TIMEOUT_REQUEST_MS}ms would outlast the CLI's own timeout`,
+  );
+});
+
+test("startup warm-up gets a longer budget than the request path", async () => {
+  // A remote backend pays DNS + TLS on its first request; 2.5s can cut it off.
+  assert.ok(PROBE_TIMEOUT_WARM_MS > PROBE_TIMEOUT_REQUEST_MS);
+});
+
+test("warmCatalog fills the cache so the first request is served from it", async () => {
+  stubFetch(OK(["a", "b"]));
+  await warmCatalog(cfg());
+  assert.equal(calls.length, 1);
+  const c = await getCatalog(cfg());
+  assert.equal(calls.length, 1, "the request path must reuse the warmed catalog");
+  assert.deepEqual(c.entries.map((e) => e.id), ["a", "b"]);
+});
+
+test("a partial result is retried sooner than a complete one", async () => {
+  // Regression: a slow backend dropped out of a cached catalog for a full 60s,
+  // and Claude Code only fetches the picker once — so it stayed missing.
+  process.env.CLAUDE_CODE_FREE_CONFIG = providerDir;
+  let cloudUp = false;
+  stubFetch((url) => {
+    if (url.startsWith("http://local")) return { ok: true, body: { data: [{ id: "local-model" }] } };
+    return cloudUp ? { ok: true, body: { data: [{ id: "cloud-model" }] } } : { ok: false, throws: true };
+  });
+
+  const partial = await getCatalog(cfg());
+  assert.deepEqual(partial.unreachable, ["cloud"]);
+  assert.equal(partial.entries.length, 1);
+
+  // Within the short partial TTL the cache is reused...
+  const cachedCalls = calls.length;
+  await getCatalog(cfg());
+  assert.equal(calls.length, cachedCalls, "still inside the partial TTL");
+
+  // ...but it expires quickly, and the recovered backend reappears.
+  cloudUp = true;
+  await sleep(TTL_PARTIAL_MS + 200);
+  const full = await getCatalog(cfg());
+  assert.deepEqual(full.unreachable, []);
+  assert.deepEqual(full.entries.map((e) => e.id).sort(), ["cloud-model", "local-model"]);
+});
+
+test("providers are probed concurrently, not one after another", async () => {
+  process.env.CLAUDE_CODE_FREE_CONFIG = providerDir;
+  let inFlight = 0;
+  let maxInFlight = 0;
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    inFlight++;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await sleep(60);
+    inFlight--;
+    return new Response(JSON.stringify({ data: [{ id: String(input).includes("local") ? "a" : "b" }] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  await getCatalog(cfg());
+  assert.equal(maxInFlight, 2, "a slow backend must not serialise behind another");
 });

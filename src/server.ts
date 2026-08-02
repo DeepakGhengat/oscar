@@ -5,8 +5,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { loadConfig } from "./env.ts";
 import { routeMessageRequest } from "./proxy.ts";
-import { probeModels } from "./setup.ts";
-import { clearCatalogCache, getCatalog, modelsResponse } from "./catalog.ts";
+import { clearCatalogCache, getCatalog, modelsResponse, warmCatalog } from "./catalog.ts";
+import { DEFAULT_PROVIDER, loadProviders } from "./providers.ts";
 import { estimateInputTokens } from "./tokens.ts";
 import { envFilePath, rewriteKey } from "./modelpicker.ts";
 import type { AnthropicMessagesRequest } from "./types.ts";
@@ -95,25 +95,36 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // GET /_ccf/status — current model + backend.
+    // GET /_ccf/status — current model + every configured backend.
     if (method === "GET" && path === "/_ccf/status") {
+      const { providers, errors } = loadProviders(c);
       sendJSON(res, 200, {
         openaiModel: c.openAIModel,
         openaiBaseURL: c.openAIBaseURL,
         openaiKey: c.openAIKey ? c.openAIKey.slice(0, 4) + "..." : null,
+        providers: providers.map((p) => ({
+          id: p.id,
+          baseURL: p.baseURL,
+          key: p.apiKey ? p.apiKey.slice(0, 4) + "..." : null,
+        })),
+        ...(errors.length ? { configErrors: errors } : {}),
       });
       return;
     }
 
-    // GET /_ccf/models — probe the live backend /models, sorted.
+    // GET /_ccf/models — every model across every configured backend.
     if (method === "GET" && path === "/_ccf/models") {
-      const headers: Record<string, string> = { "content-type": "application/json" };
-      if (c.openAIKey) headers.authorization = `Bearer ${c.openAIKey}`;
-      const models = await probeModels(c.openAIBaseURL, (url, init) =>
-        fetch(url, { ...init, headers: { ...headers, ...((init?.headers as Record<string, string>) ?? {}) } } as RequestInit),
-      );
-      models.sort((a, b) => a.localeCompare(b));
-      sendJSON(res, 200, { backend: c.openAIBaseURL, current: c.openAIModel, models });
+      const catalog = await getCatalog(c);
+      const models = catalog.entries.map((e) => e.id).sort((a, b) => a.localeCompare(b));
+      sendJSON(res, 200, {
+        backend: c.openAIBaseURL,
+        current: c.openAIModel,
+        models,
+        // Qualified form, so a second backend serving the same name is still
+        // addressable from the picker.
+        entries: catalog.entries.map((e) => ({ provider: e.provider.id, model: e.id, alias: e.alias })),
+        ...(catalog.unreachable.length ? { unreachable: catalog.unreachable } : {}),
+      });
       return;
     }
 
@@ -157,13 +168,14 @@ const server = createServer(async (req, res) => {
   if (method === "POST" && path === "/v1/messages") {
     const body = await readBody(req);
     try {
-      const { response, route, incomingModel, upstreamModel } = await routeMessageRequest(
+      const { response, route, incomingModel, upstreamModel, provider } = await routeMessageRequest(
         body.length ? new Uint8Array(body) : undefined,
         toWebHeaders(req.headers),
       );
+      const via = provider && provider !== DEFAULT_PROVIDER ? ` via ${provider}` : "";
       console.log(
         `[${new Date().toISOString()}] POST /v1/messages → ${route} (${response.status})` +
-          (incomingModel ? `  model: ${incomingModel} → ${upstreamModel ?? incomingModel}` : ""),
+          (incomingModel ? `  model: ${incomingModel} → ${upstreamModel ?? incomingModel}${via}` : ""),
       );
       writeWebResponse(res, response.status, response.headers);
       // Stream the (possibly ReadableStream) body back through Node.
@@ -237,4 +249,31 @@ server.listen(cfg.port, () => {
     `  routing: ${cfg.useOpenAI ? "OpenAI-compatible → " + cfg.openAIBaseURL : "passthrough → Anthropic"}`,
   );
   console.log(`  health:  http://localhost:${cfg.port}/healthz`);
+
+  if (!cfg.useOpenAI) return;
+
+  const { providers, errors } = loadProviders(cfg);
+  for (const e of errors) console.error(`[warn] ${e}`);
+  if (providers.length > 1) {
+    console.log(`  providers: ${providers.map((p) => `${p.id} → ${p.baseURL}`).join(", ")}`);
+  }
+
+  // Warm the model catalog now, with a budget the request path can't afford.
+  // Claude Code fetches /v1/models exactly once at startup and gives up after
+  // 3s, so a backend that is merely slow to answer its first request would
+  // otherwise be missing from /model for the entire session.
+  void warmCatalog(cfg)
+    .then((catalog) => {
+      if (!catalog) {
+        console.error(`[warn] no backend answered /models — /model will be empty`);
+        return;
+      }
+      console.log(`  models:  ${catalog.entries.length} across ${catalog.providers.length} backend(s)`);
+      for (const id of catalog.unreachable) {
+        console.error(`[warn] provider "${id}" did not answer /models — it will be missing from /model`);
+      }
+    })
+    .catch(() => {
+      /* best effort; the request path re-probes */
+    });
 });
