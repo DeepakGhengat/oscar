@@ -396,33 +396,17 @@ async function main() {
     process.exit(1);
   }
 
-  // Account sign-in is an external-CLI mode by definition: the credentials
-  // belong to that vendor's application and only it can use them. O.S.C.A.R.'s
-  // own agent speaks OpenAI Chat Completions to a backend of your choosing, so
-  // there is nothing for it to talk to here. Route straight to CLI mode rather
-  // than dropping into an agent with no backend.
-  if (isSubscriptionAuth() && !isTruthy(process.env.OSCAR_PROXY) && !args.includes("--cli")) {
-    // `oscar` never hands the terminal to a third-party CLI on its own. A
-    // config left over from that mode is a configuration problem to fix, not
-    // a reason to launch someone else's interface.
-    console.error(
-      `${C.bold}This config selects Anthropic account sign-in.${C.reset}\n\n` +
-      `Those credentials belong to Anthropic's own CLI, so the O.S.C.A.R. agent\n` +
-      `has no backend to call — and O.S.C.A.R. will not launch another product's\n` +
-      `interface for you.\n\n` +
-      `  ${C.bold}oscar --setup${C.reset}   choose a backend the O.S.C.A.R. agent can drive\n` +
-      `  ${C.bold}oscar --cli${C.reset}     explicitly run Anthropic's CLI with that sign-in\n`,
-    );
-    process.exit(1);
-  }
-
-  // Default mode: O.S.C.A.R.'s own agent and interface. No proxy, no second
-  // process, no third-party CLI. `--cli` opts back into driving an external
-  // CLI through the translation proxy, which is what this used to be.
-  if (!args.includes("--cli")) {
+  // O.S.C.A.R.'s own agent, when asked for by name. It speaks OpenAI Chat
+  // Completions directly to a backend, with no proxy and no second process.
+  //
+  // It is opt-in, not the default. This product is a translation proxy and a
+  // launcher for the coding CLI: that is what the config describes, what the
+  // alias layer exists to serve, and what people install it for. Renaming the
+  // product did not change what it does.
+  if (args.includes("--agent")) {
     const tsx = findTsx();
     const mainTs = join(PKG_ROOT, "src", "tui", "main.ts");
-    const forwarded = args.filter((a) => a !== "--cli");
+    const forwarded = args.filter((a) => a !== "--agent");
     if (tsx) {
       await runNode([tsx, mainTs, ...forwarded], { stdio: "inherit" });
     } else {

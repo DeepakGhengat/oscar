@@ -14,10 +14,11 @@ export interface ProviderPreset {
   kind: "cloud" | "local" | "custom" | "subscription" | "passthrough";
 }
 
-/** Can the O.S.C.A.R. agent talk to this preset directly?
+/** Can O.S.C.A.R.'s built-in agent (`oscar --agent`) talk to this preset
+ * directly? Only OpenAI-compatible backends qualify — the Anthropic modes are
+ * driven by the coding CLI, which is the default launcher path.
  *
- * Only OpenAI-compatible backends qualify. The Anthropic modes hand off to a
- * third-party CLI, so they are not part of the default product. */
+ * This describes a capability. It is not a filter on what the wizard offers. */
 export function agentCapable(p: ProviderPreset): boolean {
   return p.kind !== "subscription" && p.kind !== "passthrough";
 }
@@ -135,13 +136,11 @@ export async function main(): Promise<void> {
   const rl = createInterface({ input, output });
   console.log(banner("O.S.C.A.R. setup", "Orchestrator for System Coding & Autonomous Routing"));
 
-  // Only backends the O.S.C.A.R. agent can actually drive are offered. The two
-  // Anthropic modes launch a third-party CLI instead of O.S.C.A.R., which is
-  // not what this product is; they stay reachable with `oscar --setup --cli`
-  // for anyone who still wants that.
-  const presets = process.argv.includes("--cli")
-    ? PROVIDER_PRESETS
-    : PROVIDER_PRESETS.filter((p) => agentCapable(p));
+  // Every backend is offered, including both Anthropic modes. Account sign-in
+  // is how a paid plan is used at all, and it is the reason the launcher knows
+  // how to find and start the coding CLI. Hiding those two would remove the
+  // product's original purpose, not rebrand it.
+  const presets = PROVIDER_PRESETS;
 
   const providerOptions: SelectOption[] = presets.map((p) => ({
     label: p.label,
