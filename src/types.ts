@@ -18,15 +18,35 @@ export interface AnthropicToolUseBlock {
   input: Record<string, unknown>;
 }
 
+/** Claude Code sends these for screenshots, pasted images and image-returning
+ * tools. `base64` carries inline bytes; `url` points at a remote image. */
+export interface AnthropicImageBlock {
+  type: "image";
+  source:
+    | { type: "base64"; media_type: string; data: string }
+    | { type: "url"; url: string };
+}
+
+/** Extended-thinking blocks. They appear in assistant turns that get replayed
+ * back to us; there is no OpenAI equivalent, so they're dropped on the way out. */
+export interface AnthropicThinkingBlock {
+  type: "thinking" | "redacted_thinking";
+  thinking?: string;
+  signature?: string;
+  data?: string;
+}
+
 export interface AnthropicToolResultBlock {
   type: "tool_result";
   tool_use_id: string;
-  content: string | AnthropicTextBlock[];
+  content: string | Array<AnthropicTextBlock | AnthropicImageBlock>;
   is_error?: boolean;
 }
 
 export type AnthropicContentBlock =
   | AnthropicTextBlock
+  | AnthropicImageBlock
+  | AnthropicThinkingBlock
   | AnthropicToolUseBlock
   | AnthropicToolResultBlock;
 
@@ -91,9 +111,16 @@ export interface OpenAIToolCall {
   function: { name: string; arguments: string };
 }
 
+/** Multimodal content parts. A message only needs the array form when it
+ * actually carries an image; plain text stays a bare string for maximum
+ * backend compatibility. */
+export type OpenAIContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export interface OpenAIChatMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content: string | null;
+  content: string | OpenAIContentPart[] | null;
   tool_calls?: OpenAIToolCall[];
   tool_call_id?: string;
   name?: string;
@@ -165,6 +192,8 @@ export interface ProxyConfig {
   openAIKey: string | null;
   openAIModel: string | null;
   openAIBaseURL: string;
+  /** Ceiling applied to max_tokens, or null to pass Claude Code's value through. */
+  maxOutputTokens: number | null;
   anthropicKey: string | null;
   anthropicBaseURL: string;
   port: number;

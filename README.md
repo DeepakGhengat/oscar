@@ -34,6 +34,8 @@ CLAUDE_CODE_FREE/
 ├── src/
 │   ├── server.ts              Node http server: listens on a port, dispatches
 │   ├── proxy.ts               routes /v1/messages → OpenAI or Anthropic passthrough
+│   ├── catalog.ts             backend model list + `claude-ccf-…` aliases for /model
+│   ├── tokens.ts              local estimator for /v1/messages/count_tokens
 │   ├── openaiShim.ts          Anthropic ↔ OpenAI translation (tools, blocks, tool_use)
 │   ├── stream.ts              OpenAI SSE stream → Anthropic event stream
 │   ├── env.ts                 reads + validates the env flags
@@ -61,6 +63,33 @@ the server uses `node:http`, and tests use `node:test`. No Bun required.
 | `ANTHROPIC_API_KEY` | Used only in passthrough mode (forwarded to real Anthropic) | — |
 | `ANTHROPIC_BASE_URL` | **Set this to the proxy** so Claude Code talks to us | — |
 | `PROXY_PORT` | Port the proxy listens on | `8787` |
+| `CCF_MAX_OUTPUT_TOKENS` | Clamp on `max_tokens`. Claude Code asks for a 200k-context Claude model's budget; set this to your backend's real ceiling (e.g. `4096`) to stop it erroring or truncating mid-answer | unset (no clamp) |
+
+## Switching models from `/model`
+
+Every model your backend serves shows up in Claude Code's own `/model` picker,
+so you can move between `glm-5.2:cloud`, `qwen2.5:7b`, `deepseek-v4-pro` and the
+rest mid-session without restarting anything.
+
+This works through Claude Code's **gateway model discovery**: at startup the CLI
+fetches `$ANTHROPIC_BASE_URL/v1/models?limit=1000` and folds the result into the
+picker. The launcher sets `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`; the
+other preconditions (first-party provider, a base URL that isn't
+`api.anthropic.com`) already hold when you run through the proxy.
+
+One wrinkle: Claude Code discards any discovered id that doesn't match
+`/^(claude|anthropic)/i`, which would drop every Ollama model on the floor. So
+the proxy advertises each backend model under a `claude-ccf-…` alias and puts
+the real name in `display_name` — which is what the picker actually renders. You
+see `glm-5.2:cloud`; the CLI sends back `claude-ccf-glm-5.2-cloud`; the proxy
+maps it home before calling the backend. See [`src/catalog.ts`](src/catalog.ts).
+
+Two other ways to switch, both still available:
+
+```bash
+claude-code-free --model    # pick a model, write it to .env, then relaunch
+claude-code-free --switch   # hot-swap a *running* proxy from a second terminal
+```
 
 ## Quick start
 

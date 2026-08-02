@@ -10,6 +10,7 @@ import { loadConfig } from "../src/env.ts";
 
 // Re-implement the server startup in-process so we can point it at our mock.
 import { routeMessageRequest } from "../src/proxy.ts";
+import { clearCatalogCache, getCatalog, modelsResponse } from "../src/catalog.ts";
 import type {
   AnthropicMessagesRequest,
   AnthropicMessagesResponse,
@@ -60,10 +61,31 @@ async function pipeWebToNode(webRes: Response, res: ServerResponse): Promise<voi
   res.end();
 }
 
+/** Backend model ids the mock advertises from /models. */
+const MOCK_BACKEND_MODELS = ["glm-5.2:cloud", "qwen2.5:7b"];
+
 function startMockOpenAI(recordedModel: string): Server {
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
-    lastOpenAIRequest = JSON.parse((await readBuf(req)).toString("utf8"));
+
+    // Model listing — every OpenAI-compatible backend serves this, and the
+    // proxy probes it to build the /model alias table.
+    if (req.method === "GET" && url.pathname.endsWith("/models")) {
+      const payload = Buffer.from(
+        JSON.stringify({ object: "list", data: MOCK_BACKEND_MODELS.map((id) => ({ id })) }),
+      );
+      res.writeHead(200, { "content-type": "application/json", "content-length": payload.length });
+      res.end(payload);
+      return;
+    }
+
+    const raw = (await readBuf(req)).toString("utf8");
+    if (!raw) {
+      res.writeHead(404);
+      res.end("not found");
+      return;
+    }
+    lastOpenAIRequest = JSON.parse(raw);
     // /chat/completions non-streaming
     if (
       url.pathname.endsWith("/chat/completions") &&
@@ -133,6 +155,13 @@ function startProxy(): Server {
       res.end(JSON.stringify({ ok: true }));
       return;
     }
+    // Mirrors src/server.ts: the endpoint Claude Code's gateway discovery hits.
+    if (req.method === "GET" && url.pathname === "/v1/models") {
+      const catalog = await getCatalog(loadConfig());
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(modelsResponse(catalog)));
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/v1/messages") {
       const buf = await readBuf(req);
       const { response } = await routeMessageRequest(
@@ -147,7 +176,13 @@ function startProxy(): Server {
   });
 }
 
+// Each test starts its own mock + proxy on a fresh port. Track every one of
+// them so teardown can close them all — otherwise the listeners keep the event
+// loop alive and the test file hangs until the runner's timeout.
+const openServers: Server[] = [];
+
 function listenOnEphemeral(server: Server): Promise<number> {
+  openServers.push(server);
   return new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address();
@@ -156,9 +191,12 @@ function listenOnEphemeral(server: Server): Promise<number> {
   });
 }
 
-after(() => {
-  mockServer?.close();
-  proxyServer?.close();
+after(async () => {
+  await Promise.all(
+    openServers.map((s) => new Promise<void>((r) => s.close(() => r()))),
+  );
+  openServers.length = 0;
+  clearCatalogCache();
   // restore env so other test files aren't affected
   process.env.USE_OPENAI_API = "";
   process.env.OPENAI_API_KEY = "";
@@ -285,6 +323,54 @@ test("e2e: streaming response is translated to Anthropic SSE events", async () =
     .map((e: { delta?: { text?: string } }) => e.delta?.text ?? "")
     .join("");
   assert.strictEqual(deltas, "Hello");
+});
+
+test("e2e: /model discovery advertises backend models and routes to them", async () => {
+  clearCatalogCache();
+  mockServer = startMockOpenAI("mock-model");
+  mockPort = await listenOnEphemeral(mockServer);
+  process.env.USE_OPENAI_API = "1";
+  process.env.OPENAI_API_KEY = "sk-test";
+  process.env.OPENAI_MODEL = "deepseek-chat";
+  process.env.OPENAI_BASE_URL = `http://localhost:${mockPort}/v1`;
+
+  proxyServer = startProxy();
+  proxyPort = await listenOnEphemeral(proxyServer);
+
+  // 1. What Claude Code fetches at startup to populate the /model picker.
+  const listRes = await fetch(`http://localhost:${proxyPort}/v1/models?limit=1000`);
+  assert.strictEqual(listRes.status, 200);
+  const list = (await listRes.json()) as {
+    data: { id: string; display_name: string }[];
+  };
+  assert.strictEqual(list.data.length, MOCK_BACKEND_MODELS.length);
+  for (const entry of list.data) {
+    // Anything not matching this is silently dropped by the picker.
+    assert.match(entry.id, /^(claude|anthropic)/i);
+  }
+  assert.deepEqual(
+    list.data.map((d) => d.display_name).sort(),
+    [...MOCK_BACKEND_MODELS].sort(),
+  );
+
+  // 2. Picking "glm-5.2:cloud" sends its alias back as body.model.
+  const picked = list.data.find((d) => d.display_name === "glm-5.2:cloud");
+  assert.ok(picked, "expected glm-5.2:cloud in the advertised list");
+
+  const res = await fetch(`http://localhost:${proxyPort}/v1/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      model: picked.id,
+      max_tokens: 16,
+      messages: [{ role: "user", content: "hi" }],
+    } satisfies AnthropicMessagesRequest),
+  });
+  assert.strictEqual(res.status, 200);
+
+  // 3. The backend must be called with the real name, not the alias — and not
+  //    with OPENAI_MODEL, which the picked model overrides.
+  assert.strictEqual((lastOpenAIRequest as { model: string }).model, "glm-5.2:cloud");
 });
 
 test("e2e: passthrough mode is used when USE_OPENAI_API is unset", async () => {

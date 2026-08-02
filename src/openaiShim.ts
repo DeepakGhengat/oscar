@@ -9,8 +9,10 @@ import type {
   AnthropicToolResultBlock,
   AnthropicToolUseBlock,
   AnthropicTextBlock,
+  AnthropicImageBlock,
   OpenAIChatCompletionRequest,
   OpenAIChatMessage,
+  OpenAIContentPart,
   OpenAITool,
   OpenAIToolCall,
   OpenAIChatCompletionResponse,
@@ -47,17 +49,52 @@ export function translateToolChoice(
 }
 
 /** Flatten Anthropic content blocks into a single OpenAI `content` string. */
-function flattenText(blocks: AnthropicTextBlock[]): string {
-  return blocks.map((b) => b.text).join("");
+function flattenText(blocks: Array<{ type: string; text?: string }>): string {
+  return blocks.map((b) => (b.type === "text" ? (b.text ?? "") : "")).join("");
 }
 
-function toolResultToMessage(block: AnthropicToolResultBlock): OpenAIChatMessage {
-  const content = typeof block.content === "string" ? block.content : flattenText(block.content);
+/** Anthropic image block → OpenAI `image_url` part. Inline bytes become a
+ * data: URI, which is what OpenAI-compatible vision backends expect. */
+export function imageToPart(block: AnthropicImageBlock): OpenAIContentPart {
+  const src = block.source;
+  if (src.type === "url") {
+    return { type: "image_url", image_url: { url: src.url } };
+  }
   return {
-    role: "tool",
-    tool_call_id: block.tool_use_id,
-    content,
+    type: "image_url",
+    image_url: { url: `data:${src.media_type};base64,${src.data}` },
   };
+}
+
+/** Collapse accumulated parts into the narrowest shape a backend will accept:
+ * a bare string when there's no image, the parts array otherwise. */
+function narrowContent(parts: OpenAIContentPart[]): string | OpenAIContentPart[] {
+  if (parts.every((p) => p.type === "text")) {
+    return parts.map((p) => (p.type === "text" ? p.text : "")).join("");
+  }
+  return parts;
+}
+
+function toolResultToMessage(block: AnthropicToolResultBlock): OpenAIChatMessage[] {
+  if (typeof block.content === "string") {
+    return [{ role: "tool", tool_call_id: block.tool_use_id, content: block.content }];
+  }
+
+  // `role: "tool"` messages are text-only in the OpenAI schema, so an image
+  // returned by a tool has to ride along in a following user message rather
+  // than being dropped (Claude Code's screenshot tools do exactly this).
+  const images = block.content.filter((b): b is AnthropicImageBlock => b.type === "image");
+  const out: OpenAIChatMessage[] = [
+    {
+      role: "tool",
+      tool_call_id: block.tool_use_id,
+      content: flattenText(block.content) || (images.length ? "[see attached image]" : ""),
+    },
+  ];
+  if (images.length) {
+    out.push({ role: "user", content: images.map(imageToPart) });
+  }
+  return out;
 }
 
 /** Convert a single Anthropic message (with its content blocks) into one or more
@@ -72,26 +109,32 @@ export function translateMessage(msg: AnthropicMessage): OpenAIChatMessage[] {
 
   const out: OpenAIChatMessage[] = [];
   if (msg.role === "user") {
-    // User turns may contain tool_result blocks (results of previous tool calls).
-    const textParts: string[] = [];
+    // User turns may contain tool_result blocks (results of previous tool
+    // calls) and images (screenshots, pasted pictures).
+    let parts: OpenAIContentPart[] = [];
+    const flushParts = () => {
+      if (!parts.length) return;
+      out.push({ role: "user", content: narrowContent(parts) });
+      parts = [];
+    };
+
     for (const block of msg.content) {
       if (block.type === "tool_result") {
-        if (textParts.length) {
-          out.push({ role: "user", content: textParts.join("") });
-          textParts.length = 0;
-        }
-        out.push(toolResultToMessage(block));
+        flushParts();
+        out.push(...toolResultToMessage(block));
       } else if (block.type === "text") {
-        textParts.push(block.text);
+        parts.push({ type: "text", text: block.text });
+      } else if (block.type === "image") {
+        parts.push(imageToPart(block));
       }
     }
-    if (textParts.length) {
-      out.push({ role: "user", content: textParts.join("") });
-    }
+    flushParts();
     return out;
   }
 
-  // Assistant turn: collect text + tool_calls together.
+  // Assistant turn: collect text + tool_calls together. Thinking blocks are
+  // deliberately dropped — OpenAI has no field to replay them into, and
+  // re-sending chain-of-thought as plain text corrupts the transcript.
   const textParts: string[] = [];
   const toolCalls: OpenAIToolCall[] = [];
   for (const block of msg.content) {
@@ -126,6 +169,10 @@ export function translateSystem(
 export function buildOpenAIRequest(
   req: AnthropicMessagesRequest,
   modelOverride: string,
+  /** Upper bound on output tokens. Claude Code sizes `max_tokens` for a
+   * 200k-context Claude model; a smaller backend will either error or silently
+   * truncate, so clamp when the real ceiling is known. */
+  maxOutputTokens?: number | null,
 ): OpenAIChatCompletionRequest {
   const messages: OpenAIChatMessage[] = [];
 
@@ -143,9 +190,13 @@ export function buildOpenAIRequest(
   };
 
   if (req.max_tokens) {
+    const capped =
+      maxOutputTokens && maxOutputTokens > 0
+        ? Math.min(req.max_tokens, maxOutputTokens)
+        : req.max_tokens;
     // OpenAI's newer models use `max_completion_tokens`; keep both for compat.
-    out.max_tokens = req.max_tokens;
-    out.max_completion_tokens = req.max_tokens;
+    out.max_tokens = capped;
+    out.max_completion_tokens = capped;
   }
   if (req.temperature !== undefined) out.temperature = req.temperature;
   if (req.top_p !== undefined) out.top_p = req.top_p;

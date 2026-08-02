@@ -23,12 +23,27 @@ export function loadConfig(): ProxyConfig {
 
   const port = Number(process.env.PROXY_PORT ?? 8787);
 
+  // Claude Code sizes max_tokens for a 200k-context Claude model. Backends
+  // with a smaller ceiling reject the request or truncate mid-answer, so allow
+  // an explicit cap. Unset (or non-positive) means "don't clamp".
+  const rawCap = Number(process.env.CCF_MAX_OUTPUT_TOKENS ?? "");
+  const maxOutputTokens = Number.isFinite(rawCap) && rawCap > 0 ? rawCap : null;
+
   if (useOpenAI) {
     if (!openAIKey) throw new Error("USE_OPENAI_API=1 but OPENAI_API_KEY is not set");
     if (!openAIModel) throw new Error("USE_OPENAI_API=1 but OPENAI_MODEL is not set");
   }
 
-  return { useOpenAI, openAIKey, openAIModel, openAIBaseURL, anthropicKey, anthropicBaseURL, port };
+  return {
+    useOpenAI,
+    openAIKey,
+    openAIModel,
+    openAIBaseURL,
+    maxOutputTokens,
+    anthropicKey,
+    anthropicBaseURL,
+    port,
+  };
 }
 
 /** True only when the proxy itself should intercept (i.e. OpenAI routing on). */

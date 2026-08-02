@@ -13,7 +13,7 @@
 //   8. Launch the claude CLI, forwarding remaining args
 //   9. Tear down the proxy on exit
 
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -71,13 +71,50 @@ function isTruthy(v) {
   return v !== undefined && TRUTHY.has(v.trim().toLowerCase());
 }
 
-/** Locate the claude CLI: bundled SDK binary, else PATH. */
+/** Compare two dotted version strings numerically: 2.1.219 > 2.1.99. */
+function compareVersions(a, b) {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+/** Newest `<root>/<version>/<exe>` under a versioned install root, or null. */
+function newestVersioned(root, exe) {
+  if (!existsSync(root)) return null;
+  let best = null;
+  for (const name of readdirSync(root)) {
+    if (!/^\d+\.\d+\.\d+/.test(name)) continue;
+    if (!existsSync(join(root, name, exe))) continue;
+    if (!best || compareVersions(name, best) > 0) best = name;
+  }
+  return best ? { path: join(root, best, exe), version: best } : null;
+}
+
+/** Locate the claude CLI. The Claude desktop app ships its own versioned
+ * copy and never puts it on PATH, so check that before giving up — otherwise
+ * a desktop-only install fails to launch with a bare ENOENT. */
 function findClaudeBin() {
   const exe = process.platform === "win32" ? "claude.exe" : "claude";
+
   const sdkBin = join(PKG_ROOT, "sdk", "bin", exe);
-  if (existsSync(sdkBin)) return sdkBin;
+  if (existsSync(sdkBin)) return { path: sdkBin, version: null };
+
+  const roots = [];
+  if (process.env.APPDATA) roots.push(join(process.env.APPDATA, "Claude", "claude-code"));
+  roots.push(join(homedir(), "AppData", "Roaming", "Claude", "claude-code"));
+  roots.push(join(homedir(), "Library", "Application Support", "Claude", "claude-code"));
+  roots.push(join(homedir(), ".config", "Claude", "claude-code"));
+  for (const root of roots) {
+    const found = newestVersioned(root, exe);
+    if (found) return found;
+  }
+
   // Rely on PATH lookup by spawning without an absolute path.
-  return exe;
+  return { path: exe, version: null };
 }
 
 /** Find the tsx CLI shipped with the package. */
@@ -232,17 +269,56 @@ async function main() {
   process.env.ANTHROPIC_REAL_BASE_URL = "https://api.anthropic.com";
   if (isTruthy(process.env.USE_OPENAI_API)) {
     process.env.ANTHROPIC_API_KEY = "claude-code-free-dummy-key";
+    // Make the backend's models show up in /model. Claude Code only performs
+    // gateway model discovery (GET $ANTHROPIC_BASE_URL/v1/models) when this is
+    // set; the other preconditions — first-party provider and a base URL that
+    // isn't api.anthropic.com — already hold here.
+    process.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1";
     // Bypass stored expired OAuth credentials so the env-var key is used.
     const cleanConfig = join(homedir(), ".claude-code-free", "claude-config");
     mkdirSync(cleanConfig, { recursive: true });
     process.env.CLAUDE_CONFIG_DIR = cleanConfig;
+    // claude persists API-key rejections into .claude.json's
+    // customApiKeyResponses.rejected[]. If a prior run rejected the dummy
+    // key, claude shows the login page instead of using the env var. Wipe
+    // any rejected entries for our dummy key so each launch starts clean.
+    const claudeJson = join(cleanConfig, ".claude.json");
+    if (existsSync(claudeJson)) {
+      try {
+        const raw = readFileSync(claudeJson, "utf8");
+        const data = JSON.parse(raw);
+        let changed = false;
+        if (data.customApiKeyResponses && Array.isArray(data.customApiKeyResponses.rejected)) {
+          const filtered = data.customApiKeyResponses.rejected.filter(
+            (k) => k !== "claude-code-free-dummy-key" && k !== "-code-free-dummy-key",
+          );
+          if (filtered.length !== data.customApiKeyResponses.rejected.length) {
+            data.customApiKeyResponses.rejected = filtered;
+            changed = true;
+          }
+        }
+        if (changed) writeFileSync(claudeJson, JSON.stringify(data, null, 2));
+      } catch {
+        // corrupt or unreadable — let claude recreate it
+      }
+    }
   }
 
   // 4. Launch claude, forwarding args (minus any --setup we already handled).
   const claudeArgs = args.filter((a) => a !== "--setup" && a !== "--switch");
   const claudeBin = findClaudeBin();
-  console.log(`Launching: ${claudeBin}`);
-  const claude = spawn(claudeBin, claudeArgs, { stdio: "inherit", env: process.env });
+  console.log(
+    `Launching: ${claudeBin.path}${claudeBin.version ? ` (claude-code ${claudeBin.version})` : ""}`,
+  );
+  const claude = spawn(claudeBin.path, claudeArgs, { stdio: "inherit", env: process.env });
+  claude.on("error", (err) => {
+    console.error(
+      `Could not launch the claude CLI (${claudeBin.path}): ${err.message}\n` +
+      `Install it with: npm i -g @anthropic-ai/claude-code`,
+    );
+    killProxy();
+    process.exit(1);
+  });
   claude.on("exit", (code) => {
     killProxy();
     process.exit(code ?? 0);

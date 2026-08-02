@@ -6,7 +6,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { loadConfig } from "./env.ts";
 import { routeMessageRequest } from "./proxy.ts";
 import { probeModels } from "./setup.ts";
+import { clearCatalogCache, getCatalog, modelsResponse } from "./catalog.ts";
+import { estimateInputTokens } from "./tokens.ts";
 import { envFilePath, rewriteKey } from "./modelpicker.ts";
+import type { AnthropicMessagesRequest } from "./types.ts";
 
 const cfg = loadConfig();
 
@@ -132,6 +135,9 @@ const server = createServer(async (req, res) => {
         return;
       }
       process.env.OPENAI_MODEL = model;
+      // A switch usually follows a `ollama pull`, so drop the memo and let the
+      // next request re-probe rather than serving a 60s-stale model list.
+      clearCatalogCache();
       try {
         rewriteKey(envFilePath(), "OPENAI_MODEL", model);
       } catch (err) {
@@ -170,55 +176,41 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // Bootstrap interception: claude GETs /v1/me on startup and uses
-  // `additional_model_options` in the response to populate the /model menu.
-  // When OpenAI routing is on, inject every backend model as a menu entry so
-  // /model shows the real backend models (glm-5.2, deepseek-v4-pro, ...) and
-  // picking one routes to it (proxy.ts honors body.model when it's a known
-  // backend model). We forward to real Anthropic first to keep the rest of
-  // the /v1/me payload intact, then splice in our options.
-  if (method === "GET" && path === "/v1/me" && cfg.useOpenAI) {
+  // Token counting. Claude Code uses this to decide when to compact, and in
+  // OpenAI-routing mode it can't reach the real endpoint (dummy key → 401), so
+  // answer it locally. Passthrough mode still forwards to Anthropic below.
+  if (method === "POST" && path === "/v1/messages/count_tokens" && cfg.useOpenAI) {
+    const body = await readBody(req);
+    try {
+      const parsed = JSON.parse(body.toString("utf8")) as AnthropicMessagesRequest;
+      const input_tokens = estimateInputTokens(parsed);
+      sendJSON(res, 200, { input_tokens });
+      console.log(`[${new Date().toISOString()}] POST /v1/messages/count_tokens → ~${input_tokens}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      sendJSON(res, 400, { error: { type: "invalid_request_error", message: msg } });
+    }
+    return;
+  }
+
+  /* ----- gateway model discovery: this is what populates /model -----
+   * On startup Claude Code fetches `${ANTHROPIC_BASE_URL}/v1/models?limit=1000`
+   * and caches the result as extra entries in the /model picker. It requires
+   * CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1 and a non-anthropic base URL
+   * (the launcher sets both), and it drops every id that doesn't match
+   * /^(claude|anthropic)/i — hence the `claude-ccf-…` aliases from catalog.ts.
+   * The real name rides along in `display_name`, which is what gets rendered. */
+  if (method === "GET" && path === "/v1/models" && cfg.useOpenAI) {
     const c = loadConfig();
     try {
-      const headers: Record<string, string> = { "content-type": "application/json" };
-      if (c.openAIKey) headers.authorization = `Bearer ${c.openAIKey}`;
-      const backendIds = await probeModels(c.openAIBaseURL, (url, init) =>
-        fetch(url, {
-          ...init,
-          headers: { ...headers, ...((init?.headers as Record<string, string>) ?? {}) },
-        } as RequestInit),
-      );
-      const additionalModelOptions = backendIds.map((id) => ({
-        model: id,
-        name: id,
-        description: "Backend model",
-      }));
-
-      // Forward to real Anthropic for the base payload; if that fails (e.g.
-      // dummy key / no network), fall back to a minimal stub that still
-      // carries the model options so the menu populates.
-      let baseJson: Record<string, unknown> = {};
-      let status = 200;
-      try {
-        const init: RequestInit = { method, headers: toWebHeaders(req.headers) };
-        const upstream = await fetch(`${cfg.anthropicBaseURL}${path}`, init);
-        status = upstream.status;
-        if (upstream.ok) {
-          const text = await upstream.text();
-          if (text) baseJson = JSON.parse(text) as Record<string, unknown>;
-        }
-      } catch {
-        // keep stub
-      }
-
-      baseJson.additional_model_options = additionalModelOptions;
-      sendJSON(res, status, baseJson);
+      const catalog = await getCatalog(c);
+      sendJSON(res, 200, modelsResponse(catalog));
       console.log(
-        `[${new Date().toISOString()}] GET /v1/me → injected ${additionalModelOptions.length} backend model option(s)`,
+        `[${new Date().toISOString()}] GET /v1/models → advertised ${catalog.entries.length} backend model(s)`,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[error] /v1/me interception: ${msg}`);
+      console.error(`[error] /v1/models: ${msg}`);
       sendJSON(res, 500, { error: { type: "proxy_error", message: msg } });
     }
     return;

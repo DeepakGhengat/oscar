@@ -61,6 +61,11 @@ export ANTHROPIC_BASE_URL="http://localhost:$PORT"
 # Keep the real Anthropic key available for passthrough mode (set ANTHROPIC_REAL_BASE_URL
 # if you want passthrough to hit a non-default Anthropic endpoint).
 export ANTHROPIC_REAL_BASE_URL="https://api.anthropic.com"
+if [ "${USE_OPENAI_API:-0}" = "1" ]; then
+  # Make backend models appear in /model: claude only fetches
+  # $ANTHROPIC_BASE_URL/v1/models for the picker when this is set.
+  export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1
+fi
 
 echo "Launching: $CLAUDE_BIN"
 exec "$CLAUDE_BIN" "$@"

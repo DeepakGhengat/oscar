@@ -96,6 +96,9 @@ try {
   # leave the real key alone (user must authenticate normally).
   if ($env:USE_OPENAI_API -eq "1") {
     $env:ANTHROPIC_API_KEY = "claude-code-free-dummy-key"
+    # Make backend models appear in /model: claude only fetches
+    # $ANTHROPIC_BASE_URL/v1/models for the picker when this is set.
+    $env:CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1"
     # claude prefers stored OAuth credentials over the env-var key; an
     # expired token in the user's real ~/.claude/.credentials.json makes
     # it show "Login expired" and ignore our dummy key. Point the CLI at
