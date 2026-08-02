@@ -401,16 +401,19 @@ async function main() {
   // own agent speaks OpenAI Chat Completions to a backend of your choosing, so
   // there is nothing for it to talk to here. Route straight to CLI mode rather
   // than dropping into an agent with no backend.
-  if (isSubscriptionAuth() && !isTruthy(process.env.OSCAR_PROXY) && !args.includes("--agent")) {
-    const profile = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
-    try {
-      mkdirSync(profile, { recursive: true });
-      seedClaudeProfile(profile, `node "${join(PKG_ROOT, "bin", "oscar-statusline.mjs")}"`);
-    } catch {
-      // A read-only or unusual profile is not worth failing the launch over.
-    }
-    launchCli(args.filter((a) => a !== "--cli"));
-    return;
+  if (isSubscriptionAuth() && !isTruthy(process.env.OSCAR_PROXY) && !args.includes("--cli")) {
+    // `oscar` never hands the terminal to a third-party CLI on its own. A
+    // config left over from that mode is a configuration problem to fix, not
+    // a reason to launch someone else's interface.
+    console.error(
+      `${C.bold}This config selects Anthropic account sign-in.${C.reset}\n\n` +
+      `Those credentials belong to Anthropic's own CLI, so the O.S.C.A.R. agent\n` +
+      `has no backend to call — and O.S.C.A.R. will not launch another product's\n` +
+      `interface for you.\n\n` +
+      `  ${C.bold}oscar --setup${C.reset}   choose a backend the O.S.C.A.R. agent can drive\n` +
+      `  ${C.bold}oscar --cli${C.reset}     explicitly run Anthropic's CLI with that sign-in\n`,
+    );
+    process.exit(1);
   }
 
   // Default mode: O.S.C.A.R.'s own agent and interface. No proxy, no second

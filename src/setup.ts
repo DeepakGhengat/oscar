@@ -14,6 +14,14 @@ export interface ProviderPreset {
   kind: "cloud" | "local" | "custom" | "subscription" | "passthrough";
 }
 
+/** Can the O.S.C.A.R. agent talk to this preset directly?
+ *
+ * Only OpenAI-compatible backends qualify. The Anthropic modes hand off to a
+ * third-party CLI, so they are not part of the default product. */
+export function agentCapable(p: ProviderPreset): boolean {
+  return p.kind !== "subscription" && p.kind !== "passthrough";
+}
+
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   { id: "openai",      label: "OpenAI",                baseURL: "https://api.openai.com/v1",  defaultModel: "gpt-4o-mini", keyHint: null,         kind: "cloud" },
   { id: "deepseek",    label: "DeepSeek",              baseURL: "https://api.deepseek.com/v1", defaultModel: "deepseek-chat", keyHint: null,       kind: "cloud" },
@@ -127,12 +135,20 @@ export async function main(): Promise<void> {
   const rl = createInterface({ input, output });
   console.log(banner("O.S.C.A.R. setup", "Orchestrator for System Coding & Autonomous Routing"));
 
-  const providerOptions: SelectOption[] = PROVIDER_PRESETS.map((p) => ({
+  // Only backends the O.S.C.A.R. agent can actually drive are offered. The two
+  // Anthropic modes launch a third-party CLI instead of O.S.C.A.R., which is
+  // not what this product is; they stay reachable with `oscar --setup --cli`
+  // for anyone who still wants that.
+  const presets = process.argv.includes("--cli")
+    ? PROVIDER_PRESETS
+    : PROVIDER_PRESETS.filter((p) => agentCapable(p));
+
+  const providerOptions: SelectOption[] = presets.map((p) => ({
     label: p.label,
     description: p.kind === "local" ? "local" : p.kind,
   }));
-  const idx = await select(rl, providerOptions, "Choose an LLM provider");
-  const preset = PROVIDER_PRESETS[idx]!;
+  const idx = await select(rl, providerOptions, "Choose a backend");
+  const preset = presets[idx]!;
 
   let useOpenAI = false;
   let openAIKey: string | null = null;
