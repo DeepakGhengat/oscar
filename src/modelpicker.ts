@@ -64,7 +64,12 @@ export function rewriteKey(file: string, key: string, value: string): void {
       break;
     }
   }
-  if (!found) lines.push(`${key}=${value}`);
+  if (!found) {
+    // A file ending in "\n" splits to a trailing "" element. Appending after
+    // it would wedge a blank line in — and one more on every later append.
+    while (lines.length && lines[lines.length - 1]!.trim() === "") lines.pop();
+    lines.push(`${key}=${value}`);
+  }
   writeFileSync(file, lines.join("\n").replace(/\n*$/, "\n"));
 }
 

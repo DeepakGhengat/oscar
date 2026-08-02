@@ -44,9 +44,22 @@ CLAUDE_CODE_FREE/
 │   ├── install-sdk.sh         vendors the installed @anthropic-ai/claude-code SDK here
 │   ├── run.sh                 launches the proxy + claude together
 │   └── run-tests.sh           runs the test suite
-└── test/
-    ├── cases.test.ts          translation unit tests (no network)
-    └── integration.test.ts    e2e tests with in-process mock servers (no network)
+└── test/                      178 tests, all offline
+    ├── cases.test.ts          core Anthropic ↔ OpenAI translation
+    ├── shim-edge.test.ts      translation edge cases + token estimator
+    ├── multimodal.test.ts     images, thinking blocks, max_tokens clamp
+    ├── stream-edge.test.ts    SSE state machine: block pairing, tool calls
+    ├── catalog.test.ts        /model alias table
+    ├── catalog-probe.test.ts  backend probing + memoisation (stubbed fetch)
+    ├── proxy-routing.test.ts  model resolution, upstream errors, passthrough
+    ├── server.test.ts         every HTTP route, against a spawned proxy
+    ├── env.test.ts            loadConfig: flags, URLs, validation, clamp
+    ├── envfile.test.ts        .env parsing
+    ├── env-loading.test.ts    .env precedence vs real environment
+    ├── modelpicker.test.ts    surgical .env rewrites for --model / --switch
+    ├── launcher.test.ts       version comparison + claude binary discovery
+    ├── setup.test.ts          wizard presets and /models probing
+    └── integration.test.ts    e2e through the real proxy + mock backend
 ```
 
 This is a **plain Node.js** project — TypeScript runs via [`tsx`](https://github.com/privatenumber/tsx),
@@ -136,5 +149,7 @@ bash scripts/run-tests.sh
 # or directly: npx tsx --test test/
 ```
 
-Unit tests cover the translation logic; integration tests spin up in-process
-mock servers (no external network). Both run offline on Node.
+Everything runs offline. Unit tests cover the translation and config logic;
+`catalog-probe` stubs `globalThis.fetch`; `proxy-routing` and `integration`
+spin up in-process mock backends; `server.test.ts` spawns the real
+`src/server.ts` as a child process and drives every route over HTTP.

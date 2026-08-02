@@ -1,0 +1,11 @@
+// Types for the pure helpers the launcher exports so tests can typecheck.
+// The CLI entry point itself is not part of the public surface.
+
+export declare function parseEnvFile(content: string): Record<string, string>;
+
+export declare function compareVersions(a: string, b: string): number;
+
+export declare function newestVersioned(
+  root: string,
+  exe: string,
+): { path: string; version: string } | null;

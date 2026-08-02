@@ -34,7 +34,7 @@ function envPath() {
   return join(configDir(), ".env");
 }
 
-function parseEnvFile(content) {
+export function parseEnvFile(content) {
   const out = {};
   for (const rawLine of content.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -72,7 +72,7 @@ function isTruthy(v) {
 }
 
 /** Compare two dotted version strings numerically: 2.1.219 > 2.1.99. */
-function compareVersions(a, b) {
+export function compareVersions(a, b) {
   const pa = a.split(".").map(Number);
   const pb = b.split(".").map(Number);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -83,7 +83,7 @@ function compareVersions(a, b) {
 }
 
 /** Newest `<root>/<version>/<exe>` under a versioned install root, or null. */
-function newestVersioned(root, exe) {
+export function newestVersioned(root, exe) {
   if (!existsSync(root)) return null;
   let best = null;
   for (const name of readdirSync(root)) {
@@ -337,7 +337,12 @@ function runNode(args, opts) {
   });
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Only launch when executed as a CLI. Importing this file (e.g. from tests)
+// must not start a proxy or spawn claude.
+const invokedPath = process.argv[1] ? resolve(process.argv[1]) : "";
+if (invokedPath === resolve(__filename)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

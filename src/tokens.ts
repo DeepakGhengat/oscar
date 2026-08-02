@@ -58,7 +58,9 @@ export function estimateInputTokens(req: AnthropicMessagesRequest): number {
   if (typeof req.system === "string") {
     total += textTokens(req.system);
   } else if (Array.isArray(req.system)) {
-    for (const b of req.system) total += textTokens(b.text);
+    // Join before counting: rounding each block up separately inflates the
+    // estimate and makes a split prompt cost more than the same text unsplit.
+    total += textTokens(req.system.map((b) => b.text).join(""));
   }
 
   for (const msg of req.messages) {
