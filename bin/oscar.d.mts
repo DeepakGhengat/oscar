@@ -11,3 +11,7 @@ export declare function newestVersioned(
 ): { path: string; version: string } | null;
 
 export declare function isCliEntry(argv1: string | undefined, self: string): boolean;
+
+export declare function banner(lines: string[]): string;
+
+export declare function seedClaudeProfile(dir: string, statusLineCmd?: string): void;

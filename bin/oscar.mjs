@@ -131,6 +131,86 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/* ------------------------------ branding ---------------------------------- */
+
+const C = {
+  reset: "[0m",
+  dim: "[2m",
+  bold: "[1m",
+  cyan: "[36m",
+};
+
+/** Shown before Claude Code takes over the terminal. */
+export function banner(lines) {
+  const art = [
+    "  ██████╗ ███████╗ ██████╗ █████╗ ██████╗ ",
+    " ██╔═══██╗██╔════╝██╔════╝██╔══██╗██╔══██╗",
+    " ██║   ██║███████╗██║     ███████║██████╔╝",
+    " ██║   ██║╚════██║██║     ██╔══██║██╔══██╗",
+    " ╚██████╔╝███████║╚██████╗██║  ██║██║  ██║",
+    "  ╚═════╝ ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝",
+  ];
+  const out = [""];
+  for (const l of art) out.push(`${C.cyan}${l}${C.reset}`);
+  out.push(`${C.dim} Orchestrator for System Coding & Autonomous Routing${C.reset}`);
+  out.push("");
+  for (const l of lines) out.push(` ${l}`);
+  out.push("");
+  return out.join("\n");
+}
+
+/** Set the terminal window/tab title, so the window reads O.S.C.A.R. too. */
+function setTerminalTitle(title) {
+  if (!process.stdout.isTTY) return;
+  process.stdout.write(`]0;${title}`);
+}
+
+/** Pre-seed the throwaway Claude Code profile.
+ *
+ * Two reasons. First, a fresh profile means Claude Code runs its first-run
+ * onboarding — the theme picker — on every launch, which is noise nobody asked
+ * for. Second, `statusLine` is the supported hook for putting our own branding
+ * and the live backend inside Claude Code's interface.
+ *
+ * Existing values are preserved: this only fills in what is missing, so a user
+ * who sets their own theme or status line keeps it. */
+export function seedClaudeProfile(dir, statusLineCmd) {
+  const settingsPath = join(dir, "settings.json");
+  let settings = {};
+  if (existsSync(settingsPath)) {
+    try {
+      settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    } catch {
+      settings = {};
+    }
+  }
+  let changed = false;
+  if (settings.theme === undefined) {
+    settings.theme = "dark";
+    changed = true;
+  }
+  if (settings.statusLine === undefined && statusLineCmd) {
+    settings.statusLine = { type: "command", command: statusLineCmd };
+    changed = true;
+  }
+  if (changed) writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+
+  // hasCompletedOnboarding lives in .claude.json, not settings.json.
+  const claudeJson = join(dir, ".claude.json");
+  let data = {};
+  if (existsSync(claudeJson)) {
+    try {
+      data = JSON.parse(readFileSync(claudeJson, "utf8"));
+    } catch {
+      data = {};
+    }
+  }
+  if (data.hasCompletedOnboarding !== true) {
+    data.hasCompletedOnboarding = true;
+    writeFileSync(claudeJson, JSON.stringify(data, null, 2) + "\n");
+  }
+}
+
 async function waitForHealth(port, proxyProc) {
   const url = `http://localhost:${port}/healthz`;
   for (let i = 0; i < 40; i++) {
@@ -248,7 +328,8 @@ async function main() {
   }
 
   // 1. Start proxy.
-  console.log(`Starting proxy on port ${port} ...`);
+  setTerminalTitle("O.S.C.A.R.");
+  console.log(`${C.dim}Starting proxy on port ${port} ...${C.reset}`);
   const serverTs = join(PKG_ROOT, "src", "server.ts");
   const tsx = findTsx();
   const proxyArgs = tsx ? [tsx, serverTs] : [serverTs];
@@ -280,7 +361,7 @@ async function main() {
     killProxy();
     process.exit(1);
   }
-  console.log(`Proxy healthy on port ${port}.`);
+  console.log(`${C.dim}Proxy healthy on port ${port}.${C.reset}`);
 
   // 3. Point the claude CLI at the proxy.
   process.env.ANTHROPIC_BASE_URL = `http://localhost:${port}`;
@@ -296,6 +377,7 @@ async function main() {
     const cleanConfig = join(homedir(), ".oscar", "claude-config");
     mkdirSync(cleanConfig, { recursive: true });
     process.env.CLAUDE_CONFIG_DIR = cleanConfig;
+    seedClaudeProfile(cleanConfig, `node "${join(PKG_ROOT, "bin", "oscar-statusline.mjs")}"`);
     // claude persists API-key rejections into .claude.json's
     // customApiKeyResponses.rejected[]. If a prior run rejected the dummy
     // key, claude shows the login page instead of using the env var. Wipe
@@ -325,8 +407,19 @@ async function main() {
   // 4. Launch claude, forwarding args (minus any --setup we already handled).
   const claudeArgs = args.filter((a) => a !== "--setup" && a !== "--switch" && a !== "--doctor");
   const claudeBin = findClaudeBin();
+  // Full banner right before Claude Code takes over the screen, so the session
+  // opens under our name and states plainly what it is routing to.
+  const routing = isTruthy(process.env.USE_OPENAI_API)
+    ? `${process.env.OPENAI_MODEL ?? "?"}  ${C.dim}via${C.reset}  ${process.env.OPENAI_BASE_URL ?? "?"}`
+    : `${C.dim}passthrough → api.anthropic.com${C.reset}`;
   console.log(
-    `Launching: ${claudeBin.path}${claudeBin.version ? ` (claude-code ${claudeBin.version})` : ""}`,
+    banner([
+      `${C.bold}routing${C.reset}   ${routing}`,
+      `${C.bold}proxy${C.reset}     http://localhost:${port}`,
+      `${C.bold}engine${C.reset}    claude-code ${claudeBin.version ?? "(on PATH)"}`,
+      "",
+      `${C.dim}Type /model inside the session to switch backend model.${C.reset}`,
+    ]),
   );
   const claude = spawn(claudeBin.path, claudeArgs, { stdio: "inherit", env: process.env });
   claude.on("error", (err) => {
