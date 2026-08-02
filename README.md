@@ -7,7 +7,7 @@ O.S.C.A.R. is a local translation proxy that lets your coding CLI drive any Open
 Point the CLI at O.S.C.A.R. instead of the vendor API and every request is rewritten into OpenAI Chat Completions on the way out and back again on the way in — tools, streaming, images and token accounting included. Local Ollama, DeepSeek, OpenAI, LM Studio, vLLM, or several of them at once, all selectable from the CLI's own `/model` picker. Nothing about the CLI is patched.
 
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-244%20passing-2ea043)](#development)
+[![Tests](https://img.shields.io/badge/tests-259%20passing-2ea043)](#development)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Dependencies](https://img.shields.io/badge/runtime%20deps-1-8957e5)](package.json)
 [![Issues](https://img.shields.io/badge/issues-open-0969da)](https://github.com/DeepakGhengat/oscar/issues)
@@ -23,7 +23,7 @@ Point the CLI at O.S.C.A.R. instead of the vendor API and every request is rewri
 - **Several backends at once.** Local Ollama *and* DeepSeek *and* OpenAI in one list, each with its own base URL and key. Two backends serving the same model name stay individually addressable.
 - **It tells you when your key is wrong.** Listing models proves almost nothing — on many hosted backends that endpoint is public. O.S.C.A.R. verifies with a real completion during setup and on demand, so a bad key fails at setup instead of mid-conversation. [Why this matters](#why-listing-models-proves-nothing).
 - **Nothing is patched.** The CLI is launched unmodified, against a throwaway profile, and torn down cleanly. Flip one flag and every request goes to the real vendor API untouched.
-- **One dependency, no build step.** TypeScript run through `tsx`; 244 offline tests.
+- **One dependency, no build step.** TypeScript run through `tsx`; 259 offline tests.
 
 ## Quick Start
 
@@ -329,6 +329,8 @@ For best results, use models with strong tool/function-calling support.
 
 **`oscar: command not found`** — your npm global directory isn't on `PATH`. Find it with `npm prefix -g` and add it.
 
+**`spawn claude.exe ENOENT` on Windows** — fixed. `npm i -g @anthropic-ai/claude-code` installs a `claude.cmd` shim rather than a `claude.exe`, and O.S.C.A.R. now searches for both, plus npm's global bin directly. If you still see it, open a new terminal so `PATH` picks up the install.
+
 **`/model` shows no backend models** — check the proxy's startup log for `models: N across M backend(s)`. If a provider is named as not answering, run `oscar --doctor`.
 
 **401 mid-conversation** — your backend rejected its key. `oscar --doctor` will name which provider and why.
@@ -343,7 +345,7 @@ Longer, symptom-first version: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md
 
 ```bash
 npm install
-npm test          # 244 tests, entirely offline
+npm test          # 259 tests, entirely offline
 npm run typecheck
 npm start         # run just the proxy, without the CLI
 ```
@@ -380,7 +382,7 @@ scripts/    Shell launchers and CLI vendoring
 commands/   Slash-command definition
 skills/     Skill definition
 docs/       Setup, provider and troubleshooting guides
-test/       244 tests
+test/       259 tests
 ```
 
 ## Compatibility

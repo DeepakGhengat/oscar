@@ -109,17 +109,64 @@ export function newestVersioned(root, exe) {
   return best ? { path: join(root, best, exe), version: best } : null;
 }
 
+/** Names the CLI can be installed under, most directly executable first.
+ *
+ * On Windows `npm i -g` writes a **`claude.cmd`** shim — there is no
+ * `claude.exe` unless the standalone installer or the desktop app put one
+ * there. Looking only for the .exe misses an npm install completely, and
+ * fails as a bare ENOENT immediately after running the very install command
+ * this tool suggests. */
+export function cliExeNames(platform = process.platform) {
+  return platform === "win32"
+    ? ["claude.exe", "claude.cmd", "claude.bat", "claude"]
+    : ["claude"];
+}
+
+/** First `<dir>/<name>` that exists across PATH, or null. We resolve this
+ * ourselves rather than letting spawn do a bare PATH lookup, because spawn
+ * only ever tries the one name we hand it. */
+export function findOnPath(names, pathVar = process.env.PATH, platform = process.platform) {
+  const sep = platform === "win32" ? ";" : ":";
+  for (const raw of (pathVar ?? "").split(sep)) {
+    const dir = raw.trim().replace(/^"|"$/g, "");
+    if (!dir) continue;
+    for (const name of names) {
+      try {
+        const p = join(dir, name);
+        if (existsSync(p)) return p;
+      } catch {
+        // an unreadable or malformed PATH entry is not fatal
+      }
+    }
+  }
+  return null;
+}
+
+/** `.cmd` and `.bat` are scripts, not executables: CreateProcess cannot run
+ * them, so Node needs a shell to launch an npm-installed CLI on Windows. */
+export function needsShell(binPath, platform = process.platform) {
+  return platform === "win32" && /\.(cmd|bat)$/i.test(binPath);
+}
+
+/** Quote an argument for cmd.exe. With `shell: true` Node concatenates the
+ * command and args verbatim, so anything containing a space is our problem. */
+export function quoteForShell(s) {
+  return /[\s"&|<>^()]/.test(s) ? `"${String(s).replace(/"/g, '\\"')}"` : String(s);
+}
+
 /** Locate the coding CLI. The desktop app ships its own versioned copy and
  * never puts it on PATH, so check that before giving up — otherwise a
  * desktop-only install fails to launch with a bare ENOENT.
  *
- * The executable name and the desktop app's install directories below are
- * fixed by the CLI's own installer, not chosen by us. */
+ * The install directories below are fixed by the CLI's own installer, not
+ * chosen by us. */
 function findCliBin() {
-  const exe = process.platform === "win32" ? "claude.exe" : "claude";
+  const names = cliExeNames();
 
-  const sdkBin = join(PKG_ROOT, "sdk", "bin", exe);
-  if (existsSync(sdkBin)) return { path: sdkBin, version: null };
+  for (const name of names) {
+    const sdkBin = join(PKG_ROOT, "sdk", "bin", name);
+    if (existsSync(sdkBin)) return { path: sdkBin, version: null, found: true };
+  }
 
   const roots = [];
   if (process.env.APPDATA) roots.push(join(process.env.APPDATA, "Claude", "claude-code"));
@@ -127,12 +174,30 @@ function findCliBin() {
   roots.push(join(homedir(), "Library", "Application Support", "Claude", "claude-code"));
   roots.push(join(homedir(), ".config", "Claude", "claude-code"));
   for (const root of roots) {
-    const found = newestVersioned(root, exe);
-    if (found) return found;
+    for (const name of names) {
+      const found = newestVersioned(root, name);
+      if (found) return { ...found, found: true };
+    }
   }
 
-  // Rely on PATH lookup by spawning without an absolute path.
-  return { path: exe, version: null };
+  // npm's global bin. Normally on PATH, but a shell opened before the install
+  // will not have picked it up yet — which is exactly when people hit this.
+  const npmDirs = [];
+  if (process.env.APPDATA) npmDirs.push(join(process.env.APPDATA, "npm"));
+  npmDirs.push(join(homedir(), ".npm-global", "bin"), "/usr/local/bin");
+  for (const dir of npmDirs) {
+    for (const name of names) {
+      const p = join(dir, name);
+      if (existsSync(p)) return { path: p, version: null, found: true };
+    }
+  }
+
+  const onPath = findOnPath(names);
+  if (onPath) return { path: onPath, version: null, found: true };
+
+  // Nothing resolved. Hand back the conventional name so spawn can still try,
+  // but mark it so the failure message can be specific.
+  return { path: names[0], version: null, found: false };
 }
 
 /** Find the tsx CLI shipped with the package. */
@@ -369,10 +434,34 @@ async function main() {
 function launchCli(args, onExit = () => {}) {
   const cliArgs = args.filter((a) => a !== "--setup" && a !== "--switch" && a !== "--doctor");
   const cliBin = findCliBin();
+
+  if (!cliBin.found) {
+    console.error(
+      `Could not find the CLI. Looked for ${cliExeNames().join(", ")} in the ` +
+      `bundled sdk/, the desktop app's install directories, npm's global bin, and on PATH.\n` +
+      `Install it with: npm i -g @anthropic-ai/claude-code\n` +
+      `If you just installed it, open a new terminal so PATH is refreshed.`,
+    );
+    onExit();
+    process.exit(1);
+  }
+
   console.log(
     `Launching: ${cliBin.path}${cliBin.version ? ` (v${cliBin.version})` : ""}`,
   );
-  const cli = spawn(cliBin.path, cliArgs, { stdio: "inherit", env: process.env });
+
+  // An npm install on Windows is a .cmd shim. CreateProcess cannot execute
+  // one, so it has to go through cmd.exe — and with `shell: true` Node stops
+  // quoting arguments for us, so we do it ourselves.
+  const useShell = needsShell(cliBin.path);
+  const cli = useShell
+    ? spawn([cliBin.path, ...cliArgs].map(quoteForShell).join(" "), {
+        stdio: "inherit",
+        env: process.env,
+        shell: true,
+      })
+    : spawn(cliBin.path, cliArgs, { stdio: "inherit", env: process.env });
+
   cli.on("error", (err) => {
     console.error(
       `Could not launch the CLI (${cliBin.path}): ${err.message}\n` +

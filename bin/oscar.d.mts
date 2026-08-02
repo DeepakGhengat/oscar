@@ -13,3 +13,15 @@ export declare function newestVersioned(
 export declare function isCliEntry(argv1: string | undefined, self: string): boolean;
 
 export declare function isSubscriptionAuth(env?: Record<string, string | undefined>): boolean;
+
+export declare function cliExeNames(platform?: string): string[];
+
+export declare function findOnPath(
+  names: string[],
+  pathVar?: string,
+  platform?: string,
+): string | null;
+
+export declare function needsShell(binPath: string, platform?: string): boolean;
+
+export declare function quoteForShell(s: string): string;
