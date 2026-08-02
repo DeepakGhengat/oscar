@@ -29,6 +29,32 @@ const PASS = `${c.green}✓${c.reset}`;
 const FAIL = `${c.red}✗${c.reset}`;
 const WARN = `${c.yellow}!${c.reset}`;
 
+/** The config a real launch would see.
+ *
+ * loadEnvFile() only fills in keys that are not already in the environment, so
+ * a shell-provided `USE_OPENAI_API=1 oscar` overrides the file. The doctor has
+ * to apply the same precedence or it reports a configuration nobody is
+ * actually running. */
+export function effectiveEnv(
+  fileEnv: Record<string, string>,
+  processEnv: Record<string, string | undefined> = process.env,
+): Record<string, string> {
+  const out = { ...fileEnv };
+  for (const key of Object.keys(fileEnv).concat([
+    "USE_OPENAI_API",
+    "OSCAR_AUTH",
+    "OPENAI_BASE_URL",
+    "OPENAI_API_KEY",
+    "OPENAI_MODEL",
+    "ANTHROPIC_API_KEY",
+    "PROXY_PORT",
+  ])) {
+    const v = processEnv[key];
+    if (v !== undefined) out[key] = v;
+  }
+  return out;
+}
+
 function readEnvFile(file: string): Record<string, string> {
   const out: Record<string, string> = {};
   if (!existsSync(file)) return out;
@@ -58,7 +84,7 @@ export async function runDoctor(): Promise<boolean> {
   }
   console.log(`${PASS} config file present`);
 
-  const env = readEnvFile(file);
+  const env = effectiveEnv(readEnvFile(file));
   if (!["1", "true", "yes", "on"].includes((env.USE_OPENAI_API ?? "").toLowerCase())) {
     const auth = resolveUpstreamAuth(env.OSCAR_AUTH, env.ANTHROPIC_API_KEY || null);
     if (auth === "subscription") {
