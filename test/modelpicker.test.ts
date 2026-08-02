@@ -13,7 +13,7 @@ let dir: string;
 let file: string;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "ccf-picker-"));
+  dir = mkdtempSync(join(tmpdir(), "oscar-picker-"));
   file = join(dir, ".env");
 });
 
@@ -47,11 +47,11 @@ test("rewriteKey creates the file when it doesn't exist yet", () => {
 test("rewriteKey leaves comments and unrelated keys untouched", () => {
   writeFileSync(
     file,
-    "# claude-code-free config\nPROXY_PORT=8787\n\n# backend\nOPENAI_MODEL=old\nOPENAI_API_KEY=sk-secret\n",
+    "# oscar config\nPROXY_PORT=8787\n\n# backend\nOPENAI_MODEL=old\nOPENAI_API_KEY=sk-secret\n",
   );
   rewriteKey(file, "OPENAI_MODEL", "new");
   const out = readFileSync(file, "utf8");
-  assert.match(out, /^# claude-code-free config$/m);
+  assert.match(out, /^# oscar config$/m);
   assert.match(out, /^# backend$/m);
   assert.match(out, /^OPENAI_API_KEY=sk-secret$/m, "unrelated secrets must survive");
   assert.match(out, /^OPENAI_MODEL=new$/m);
@@ -107,25 +107,25 @@ test("repeated rewrites converge instead of accumulating lines", () => {
 
 /* ------------------------------- envFilePath ------------------------------ */
 
-test("envFilePath resolves CLAUDE_CODE_FREE_CONFIG as a directory", () => {
+test("envFilePath resolves OSCAR_CONFIG as a directory", () => {
   // Regression: it was once treated as a file path, so the global install
   // wrote its config to the wrong place.
-  const prev = process.env.CLAUDE_CODE_FREE_CONFIG;
-  process.env.CLAUDE_CODE_FREE_CONFIG = dir;
+  const prev = process.env.OSCAR_CONFIG;
+  process.env.OSCAR_CONFIG = dir;
   try {
     assert.equal(envFilePath(), join(dir, ".env"));
   } finally {
-    if (prev === undefined) delete process.env.CLAUDE_CODE_FREE_CONFIG;
-    else process.env.CLAUDE_CODE_FREE_CONFIG = prev;
+    if (prev === undefined) delete process.env.OSCAR_CONFIG;
+    else process.env.OSCAR_CONFIG = prev;
   }
 });
 
 test("envFilePath falls back to .env in the cwd for local dev", () => {
-  const prev = process.env.CLAUDE_CODE_FREE_CONFIG;
-  delete process.env.CLAUDE_CODE_FREE_CONFIG;
+  const prev = process.env.OSCAR_CONFIG;
+  delete process.env.OSCAR_CONFIG;
   try {
     assert.match(envFilePath(), /[\\/]\.env$/);
   } finally {
-    if (prev !== undefined) process.env.CLAUDE_CODE_FREE_CONFIG = prev;
+    if (prev !== undefined) process.env.OSCAR_CONFIG = prev;
   }
 });

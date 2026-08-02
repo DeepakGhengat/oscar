@@ -3,7 +3,7 @@
 Start here:
 
 ```bash
-claude-code-free --doctor
+oscar --doctor
 ```
 
 It checks config, keys and reachability, then finishes with a real completion.
@@ -11,7 +11,7 @@ Exits non-zero on failure, so it works in scripts and CI.
 
 ---
 
-## `claude-code-free: command not found`
+## `oscar: command not found`
 
 npm's global bin directory isn't on your `PATH`.
 
@@ -27,7 +27,7 @@ Add that path to `PATH` and open a new terminal. On Windows it's usually
 You're on a build predating the fix for this. Reinstall:
 
 ```bash
-npm rm -g claude-code-free && npm pack && npm install -g ./claude-code-free-0.1.0.tgz
+npm rm -g oscar && npm pack && npm install -g ./oscar-0.1.0.tgz
 ```
 
 The cause was a CLI-entry guard comparing `argv[1]` against `import.meta.url`.
@@ -53,10 +53,10 @@ models:  26 across 2 backend(s)
 ```
 
 **If that line is missing or shows 0** — no backend answered. Run
-`claude-code-free --doctor`.
+`oscar --doctor`.
 
 **If a provider is named as not answering** — it was too slow or is down.
-claude-code-free retries a partial result after 5 seconds, so restarting usually
+O.S.C.A.R. retries a partial result after 5 seconds, so restarting usually
 fixes a transient case.
 
 **If the count looks right but `/model` is still bare** — Claude Code's gateway
@@ -69,8 +69,8 @@ discovery didn't run. It requires all of:
 That last one is easy to miss — any of those switches Claude Code to a
 third-party provider mode where discovery is skipped entirely.
 
-**If you launched Claude Code yourself** rather than through `claude-code-free`, none of
-the required environment is set. Use the `claude-code-free` command.
+**If you launched Claude Code yourself** rather than through `oscar`, none of
+the required environment is set. Use the `oscar` command.
 
 ---
 
@@ -83,7 +83,7 @@ Your backend rejected the request (401). https://ollama.com/v1 (provider "cloud"
 refused the API key — this is not a Claude Code login problem.
 ```
 
-Run `claude-code-free --doctor` to confirm which one and why.
+Run `oscar --doctor` to confirm which one and why.
 
 The common cause is a **placeholder key against a hosted backend**. Presets
 default to values like `ollama` or `lm-studio`, which are fine locally and
@@ -109,27 +109,27 @@ the dummy-key mechanism didn't take effect — usually a stale profile. Remove
 the throwaway profile and relaunch:
 
 ```bash
-rm -rf ~/.claude-code-free/claude-config
+rm -rf ~/.oscar/claude-config
 ```
 
 ---
 
 ## Model works in `--doctor` but not in Claude Code
 
-Usually a name mismatch. `claude-code-free --doctor` reports it:
+Usually a name mismatch. `oscar --doctor` reports it:
 
 ```
 ! "glm-5.2:cloud" is not served here — closest: glm-5.2
 ```
 
 Ollama's local naming carries a `:cloud` suffix that the cloud API doesn't use.
-Fix with `claude-code-free --model`, which lists only names the backend actually serves.
+Fix with `oscar --model`, which lists only names the backend actually serves.
 
 ## Replies are blank
 
-A reasoning model consumed its whole budget on chain-of-thought. claude-code-free
+A reasoning model consumed its whole budget on chain-of-thought. O.S.C.A.R.
 surfaces the reasoning rather than showing nothing, but the real fix is more
-room — raise `CCF_MAX_OUTPUT_TOKENS`, or remove it.
+room — raise `OSCAR_MAX_OUTPUT_TOKENS`, or remove it.
 
 ## Answers get cut off mid-sentence
 
@@ -153,10 +153,10 @@ or a larger one.
 ## Port already in use
 
 ```bash
-PROXY_PORT=8899 claude-code-free
+PROXY_PORT=8899 oscar
 ```
 
-Or set `PROXY_PORT` in `~/.claude-code-free/.env`.
+Or set `PROXY_PORT` in `~/.oscar/.env`.
 
 ## Everything worked yesterday
 
@@ -178,11 +178,11 @@ npm start
 and Claude Code in another, pointed at it:
 
 ```bash
-ANTHROPIC_BASE_URL=http://localhost:8787 ANTHROPIC_API_KEY=claude-code-free-dummy-key CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1 claude
+ANTHROPIC_BASE_URL=http://localhost:8787 ANTHROPIC_API_KEY=oscar-dummy-key CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1 claude
 ```
 
 Every request is logged with its model mapping:
 
 ```
-POST /v1/messages → openai (200)  model: claude-ccf-local-qwen2.5-7b → qwen2.5:7b via local
+POST /v1/messages → openai (200)  model: claude-oscar-local-qwen2.5-7b → qwen2.5:7b via local
 ```

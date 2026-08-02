@@ -1,4 +1,4 @@
-# Getting started with claude-code-free
+# Getting started with O.S.C.A.R.
 
 Zero to a working setup, with nothing assumed. About ten minutes, most of it
 waiting for a model to download.
@@ -34,20 +34,20 @@ it's running. Nothing else to configure.
 
 ## Step 3 — Check Claude Code
 
-claude-code-free drives Claude Code; it doesn't replace it.
+O.S.C.A.R. drives Claude Code; it doesn't replace it.
 
 ```bash
 claude --version
 ```
 
-If that fails but you have the Claude desktop app, you're still fine — claude-code-free
+If that fails but you have the Claude desktop app, you're still fine — O.S.C.A.R.
 finds the copy the desktop app bundles. Otherwise:
 
 ```bash
 npm install -g @anthropic-ai/claude-code
 ```
 
-## Step 4 — Install claude-code-free
+## Step 4 — Install O.S.C.A.R.
 
 ```bash
 git clone https://github.com/LORDCYBERGOD/oscar.git
@@ -62,17 +62,17 @@ npm pack
 ```
 
 ```bash
-npm install -g ./claude-code-free-0.1.0.tgz
+npm install -g ./oscar-0.1.0.tgz
 ```
 
 ```bash
-rm claude-code-free-0.1.0.tgz
+rm oscar-0.1.0.tgz
 ```
 
 Check it registered:
 
 ```bash
-claude-code-free --doctor
+oscar --doctor
 ```
 
 You should see it complain that there's no config yet. That's the right answer
@@ -81,7 +81,7 @@ at this point.
 ## Step 5 — Configure
 
 ```bash
-claude-code-free --setup
+oscar --setup
 ```
 
 Answer as follows:
@@ -95,12 +95,12 @@ Answer as follows:
 | Pick a model | `qwen2.5:7b` |
 
 The wizard then sends one real request to confirm the backend answers, and
-writes `~/.claude-code-free/.env`.
+writes `~/.oscar/.env`.
 
 ## Step 6 — Verify
 
 ```bash
-claude-code-free --doctor
+oscar --doctor
 ```
 
 You want:
@@ -119,7 +119,7 @@ If anything is red, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 ## Step 7 — Run it
 
 ```bash
-claude-code-free
+oscar
 ```
 
 Claude Code starts as normal. Type `/model` and your Ollama models are in the
@@ -128,22 +128,22 @@ list. Pick one and start working.
 To check without entering the UI:
 
 ```bash
-claude-code-free -p "what files are in this directory?"
+oscar -p "what files are in this directory?"
 ```
 
 ---
 
 ## What to do next
 
-**Add a second backend.** Create `~/.claude-code-free/providers.json` and both appear in
+**Add a second backend.** Create `~/.oscar/providers.json` and both appear in
 one picker — see [PROVIDERS.md](PROVIDERS.md).
 
 **Cap output tokens.** If a small model truncates or errors, add
-`CCF_MAX_OUTPUT_TOKENS=4096` to `~/.claude-code-free/.env`. Claude Code asks for a
+`OSCAR_MAX_OUTPUT_TOKENS=4096` to `~/.oscar/.env`. Claude Code asks for a
 200k-context budget by default, which small models can't honour.
 
 **Switch models without restarting.** Use `/model` inside Claude Code, or run
-`claude-code-free --switch` from a second terminal while it's running.
+`oscar --switch` from a second terminal while it's running.
 
 ---
 
@@ -152,6 +152,6 @@ one picker — see [PROVIDERS.md](PROVIDERS.md).
 A 7B local model is not Claude. It will be slower, will sometimes ignore tool
 schemas, and will handle long contexts worse. For quick edits, file questions
 and offline work it's genuinely useful. For complex multi-step refactors, a
-larger hosted model behind claude-code-free will serve you better.
+larger hosted model behind O.S.C.A.R. will serve you better.
 
-The point of claude-code-free is that switching between them is one keystroke.
+The point of O.S.C.A.R. is that switching between them is one keystroke.

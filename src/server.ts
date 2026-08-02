@@ -83,20 +83,20 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  /* ----- control endpoints for live model switching (claude-code-free --switch) -----
+  /* ----- control endpoints for live model switching (oscar --switch) -----
    * These let the user switch the active backend model from another terminal
    * while the claude CLI is running, without restarting the proxy. They are
    * localhost-only (the server binds to localhost) and read/write the .env the
    * proxy already loads per request via loadConfig(). */
-  if (path.startsWith("/_ccf/")) {
+  if (path.startsWith("/_oscar/")) {
     const c = loadConfig();
     if (!c.useOpenAI) {
       sendJSON(res, 400, { error: "control endpoints require USE_OPENAI_API=1" });
       return;
     }
 
-    // GET /_ccf/status — current model + every configured backend.
-    if (method === "GET" && path === "/_ccf/status") {
+    // GET /_oscar/status — current model + every configured backend.
+    if (method === "GET" && path === "/_oscar/status") {
       const { providers, errors } = loadProviders(c);
       sendJSON(res, 200, {
         openaiModel: c.openAIModel,
@@ -112,8 +112,8 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // GET /_ccf/models — every model across every configured backend.
-    if (method === "GET" && path === "/_ccf/models") {
+    // GET /_oscar/models — every model across every configured backend.
+    if (method === "GET" && path === "/_oscar/models") {
       const catalog = await getCatalog(c);
       const models = catalog.entries.map((e) => e.id).sort((a, b) => a.localeCompare(b));
       sendJSON(res, 200, {
@@ -128,10 +128,10 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // POST /_ccf/model { "model": "..." } — hot-swap OPENAI_MODEL for the
+    // POST /_oscar/model { "model": "..." } — hot-swap OPENAI_MODEL for the
     // running proxy (mutates process.env so loadConfig() picks it up on the
     // next request) and persist to .env so the change survives a restart.
-    if (method === "POST" && path === "/_ccf/model") {
+    if (method === "POST" && path === "/_oscar/model") {
       const body = await readBody(req);
       let parsed: { model?: string };
       try {
@@ -155,7 +155,7 @@ const server = createServer(async (req, res) => {
         // In-memory switch still succeeded; persistence is best-effort.
         console.error(`[warn] could not persist OPENAI_MODEL to .env: ${err instanceof Error ? err.message : err}`);
       }
-      console.log(`[_ccf] switched OPENAI_MODEL → ${model}`);
+      console.log(`[oscar] switched OPENAI_MODEL → ${model}`);
       sendJSON(res, 200, { ok: true, openaiModel: model });
       return;
     }
@@ -210,7 +210,7 @@ const server = createServer(async (req, res) => {
    * and caches the result as extra entries in the /model picker. It requires
    * CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1 and a non-anthropic base URL
    * (the launcher sets both), and it drops every id that doesn't match
-   * /^(claude|anthropic)/i — hence the `claude-ccf-…` aliases from catalog.ts.
+   * /^(claude|anthropic)/i — hence the `claude-oscar-…` aliases from catalog.ts.
    * The real name rides along in `display_name`, which is what gets rendered. */
   if (method === "GET" && path === "/v1/models" && cfg.useOpenAI) {
     const c = loadConfig();
@@ -244,7 +244,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(cfg.port, () => {
-  console.log(`claude-code-free proxy listening on http://localhost:${cfg.port}`);
+  console.log(`oscar proxy listening on http://localhost:${cfg.port}`);
   console.log(
     `  routing: ${cfg.useOpenAI ? "OpenAI-compatible → " + cfg.openAIBaseURL : "passthrough → Anthropic"}`,
   );
