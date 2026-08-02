@@ -147,10 +147,15 @@ export async function main(): Promise<void> {
   if (preset.kind === "subscription") {
     subscription = true;
     console.log(
-      `\n${c.dim}Nothing to collect — no key, no port, no local server.\n` +
-      `The CLI signs in against your Anthropic account and refreshes its own\n` +
-      `credentials. Run ${c.reset}${c.bold}/login${c.reset}${c.dim} inside the CLI if you are not signed in\n` +
-      `yet; SSO, Bedrock and Vertex work as usual.${c.reset}\n`,
+      `\n${c.yellow}Note:${c.reset} this mode drives the ${c.bold}external CLI${c.reset}, not the O.S.C.A.R. agent.\n` +
+      `${c.dim}Those credentials belong to that vendor's application and only it can\n` +
+      `use them, so the O.S.C.A.R. agent has no backend to call. ${c.reset}${c.bold}oscar${c.reset}${c.dim} will\n` +
+      `launch the external CLI instead of the O.S.C.A.R. interface.\n\n` +
+      `Nothing to collect — no key, no port, no local server. Run ${c.reset}${c.bold}/login${c.reset}${c.dim}\n` +
+      `inside the CLI if you are not signed in yet; SSO, Bedrock and Vertex\n` +
+      `work as usual.\n\n` +
+      `For the O.S.C.A.R. agent, pick a backend instead: Ollama, OpenAI,\n` +
+      `DeepSeek, LM Studio, vLLM or any OpenAI-compatible server.${c.reset}\n`,
     );
   } else if (preset.kind === "passthrough") {
     port = Number(await ask(rl, "Proxy port", String(DEFAULT_PORT))) || DEFAULT_PORT;

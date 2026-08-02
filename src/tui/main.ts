@@ -47,11 +47,29 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     return 1;
   }
 
+  // Account sign-in configures no OpenAI-compatible backend, so the agent has
+  // nothing to talk to. Say that plainly instead of reporting an empty model
+  // list, which sends people looking for a network fault that isn't there.
+  if (!cfg.useOpenAI && !cfg.openAIKey && !process.env.OPENAI_BASE_URL) {
+    console.error(
+      `${c.red}No backend configured for the O.S.C.A.R. agent.${c.reset}\n\n` +
+        `Your config selects account sign-in, which belongs to the external CLI —\n` +
+        `those credentials only work in that application, so the agent has nothing\n` +
+        `to call.\n\n` +
+        `  ${c.bold}oscar --setup${c.reset}   pick a backend (Ollama, OpenAI, DeepSeek, …)\n` +
+        `  ${c.bold}oscar --cli${c.reset}     keep account sign-in and drive the external CLI\n`,
+    );
+    return 1;
+  }
+
   const choices = await listChoices(providers);
   if (!choices.size) {
+    const list = providers.map((p) => `    ${p.id}  ${p.baseURL}`).join("\n");
     console.error(
-      `${c.red}No models available.${c.reset} None of the configured backends answered /models.\n` +
-        `Run ${c.bold}oscar --doctor${c.reset} to find out why.`,
+      `${c.red}No models available.${c.reset} None of these answered /models:\n\n${list}\n\n` +
+        `  ${c.bold}oscar --doctor${c.reset}   test each backend with a real request\n` +
+        `  ${c.bold}oscar --setup${c.reset}    reconfigure\n\n` +
+        `${c.gray}If you meant to use a local server, check it is running.${c.reset}`,
     );
     return 1;
   }

@@ -396,6 +396,23 @@ async function main() {
     process.exit(1);
   }
 
+  // Account sign-in is an external-CLI mode by definition: the credentials
+  // belong to that vendor's application and only it can use them. O.S.C.A.R.'s
+  // own agent speaks OpenAI Chat Completions to a backend of your choosing, so
+  // there is nothing for it to talk to here. Route straight to CLI mode rather
+  // than dropping into an agent with no backend.
+  if (isSubscriptionAuth() && !isTruthy(process.env.OSCAR_PROXY) && !args.includes("--agent")) {
+    const profile = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+    try {
+      mkdirSync(profile, { recursive: true });
+      seedClaudeProfile(profile, `node "${join(PKG_ROOT, "bin", "oscar-statusline.mjs")}"`);
+    } catch {
+      // A read-only or unusual profile is not worth failing the launch over.
+    }
+    launchCli(args.filter((a) => a !== "--cli"));
+    return;
+  }
+
   // Default mode: O.S.C.A.R.'s own agent and interface. No proxy, no second
   // process, no third-party CLI. `--cli` opts back into driving an external
   // CLI through the translation proxy, which is what this used to be.
