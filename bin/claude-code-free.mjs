@@ -13,7 +13,7 @@
 //   8. Launch the claude CLI, forwarding remaining args
 //   9. Tear down the proxy on exit
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -355,10 +355,26 @@ function runNode(args, opts) {
   });
 }
 
-// Only launch when executed as a CLI. Importing this file (e.g. from tests)
-// must not start a proxy or spawn claude.
-const invokedPath = process.argv[1] ? resolve(process.argv[1]) : "";
-if (invokedPath === resolve(__filename)) {
+/** Was this file run as the CLI, rather than imported?
+ *
+ * Compare *real* paths. A global install links the package into npm's
+ * node_modules, so argv[1] arrives as the symlinked path while
+ * import.meta.url resolves to the real one — comparing them directly makes
+ * the global `claude-code-free` command exit silently doing nothing. */
+export function isCliEntry(argv1, self) {
+  if (!argv1) return false;
+  const real = (p) => {
+    try {
+      return realpathSync(p);
+    } catch {
+      return resolve(p);
+    }
+  };
+  return real(argv1) === real(self);
+}
+
+// Importing this file (e.g. from tests) must not start a proxy or spawn claude.
+if (isCliEntry(process.argv[1], __filename)) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);

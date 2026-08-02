@@ -9,3 +9,5 @@ export declare function newestVersioned(
   root: string,
   exe: string,
 ): { path: string; version: string } | null;
+
+export declare function isCliEntry(argv1: string | undefined, self: string): boolean;

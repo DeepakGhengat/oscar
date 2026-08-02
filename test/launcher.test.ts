@@ -4,10 +4,16 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { compareVersions, newestVersioned, parseEnvFile } from "../bin/claude-code-free.mjs";
+import { fileURLToPath } from "node:url";
+import {
+  compareVersions,
+  isCliEntry,
+  newestVersioned,
+  parseEnvFile,
+} from "../bin/claude-code-free.mjs";
 
 /* ------------------------------- parseEnvFile ----------------------------- */
 
@@ -106,6 +112,44 @@ test("newestVersioned ignores non-version directories", () => {
   } finally {
     rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
+});
+
+/* ------------------------------- CLI entry -------------------------------- */
+
+test("isCliEntry is true when the file is run directly", () => {
+  const self = fileURLToPath(new URL("../bin/claude-code-free.mjs", import.meta.url));
+  assert.equal(isCliEntry(self, self), true);
+});
+
+test("isCliEntry sees through a symlinked global install", () => {
+  // Regression: `npm link`/`npm i -g` puts the package in npm's node_modules
+  // as a symlink, so argv[1] is the linked path while import.meta.url is the
+  // real one. Comparing them literally made the global `claude-code-free`
+  // command exit 0 having done nothing at all.
+  const real = fileURLToPath(new URL("../bin/claude-code-free.mjs", import.meta.url));
+  const linkRoot = mkdtempSync(join(tmpdir(), "ccf-link-"));
+  const link = join(linkRoot, "pkg");
+  try {
+    symlinkSync(join(real, "..", ".."), link, "junction");
+  } catch {
+    // Creating links can need privileges; skip rather than fail the suite.
+    rmSync(linkRoot, { recursive: true, force: true });
+    return;
+  }
+  try {
+    const viaLink = join(link, "bin", "claude-code-free.mjs");
+    assert.notEqual(viaLink, real, "the test needs the two paths to differ");
+    assert.equal(isCliEntry(viaLink, real), true, "the global command would do nothing");
+  } finally {
+    rmSync(linkRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  }
+});
+
+test("isCliEntry is false when imported", () => {
+  const self = fileURLToPath(new URL("../bin/claude-code-free.mjs", import.meta.url));
+  // argv[1] is the test runner, not the launcher.
+  assert.equal(isCliEntry(process.argv[1], self), false);
+  assert.equal(isCliEntry(undefined, self), false);
 });
 
 test("newestVersioned returns null for a missing or empty root", () => {
