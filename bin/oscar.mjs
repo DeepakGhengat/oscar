@@ -414,6 +414,25 @@ async function main() {
     process.exit(Number(process.env.OSCAR_SETUP_EXIT ?? 0));
   }
 
+  // --profiles / --use: saved configurations. `--setup` rewrites the whole
+  // .env, so without these, configuring a second backend silently discards
+  // the first one and the only way back is to retype it.
+  if (args.includes("--profiles") || args.includes("--use")) {
+    const dir = configDir();
+    if (process.env.OSCAR_CONFIG === undefined) {
+      process.env.OSCAR_CONFIG = dir;
+    }
+    const tsx = findTsx();
+    const cmdTs = join(PKG_ROOT, "src", "profilecmd.ts");
+    const passed = args.filter((a) => a !== "--profiles");
+    if (tsx) {
+      await runNode([tsx, cmdTs, ...passed], { stdio: "inherit" });
+    } else {
+      await runNode(["tsx", cmdTs, ...passed], { stdio: "inherit", useNpx: true });
+    }
+    process.exit(Number(process.env.OSCAR_SETUP_EXIT ?? 0));
+  }
+
   // --switch: talk to a *running* proxy's /_oscar/ control endpoints and
   // hot-swap the backend model live, without restarting the CLI. Use from a
   // second terminal while the CLI is running in the first.

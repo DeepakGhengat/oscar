@@ -16,6 +16,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { banner, c, select, createQuestion, type SelectOption } from "./ui.ts";
+import { parseEnvText } from "./profiles.ts";
 
 /** Close readline without tripping the libuv assertion on piped stdin. */
 function closeRl(rl: { close: () => void; pause?: () => void }): void {
@@ -125,8 +126,24 @@ export async function runSwitchPicker(): Promise<string | null> {
   // Confirm the proxy is actually up and answering the control endpoints.
   const status = await getStatus(port);
   if (!status) {
+    // Telling someone to "start oscar first" is wrong advice when their config
+    // is one of the Anthropic modes: no proxy runs there at all, so no amount
+    // of starting will produce one. Say which situation they are in.
+    if (!usesProxy()) {
+      console.log(`${c.yellow}This config talks to Anthropic directly, so no proxy runs.${c.reset}`);
+      console.log(`${c.dim}There is no backend model to swap — use ${c.reset}${c.bold}/model${c.reset}${c.dim} inside the CLI.${c.reset}\n`);
+      console.log(`To switch to an OpenAI-compatible backend:`);
+      console.log(`  ${c.bold}oscar --profiles${c.reset}       list saved configurations`);
+      console.log(`  ${c.bold}oscar --use <name>${c.reset}     switch to one`);
+      return null;
+    }
     console.log(`${c.red}No proxy responding at http://localhost:${port}/_oscar/status.${c.reset}`);
-    console.log(`Start ${c.bold}oscar${c.reset} first in another terminal, then run ${c.bold}oscar --switch${c.reset}.`);
+    console.log(
+      `${c.bold}oscar --switch${c.reset} talks to a ${c.bold}running${c.reset} proxy, so it needs a second terminal:\n` +
+      `  terminal 1:  ${c.bold}oscar${c.reset}            leave it running\n` +
+      `  terminal 2:  ${c.bold}oscar --switch${c.reset}   swap the model live\n\n` +
+      `${c.dim}With the proxy stopped, use ${c.reset}${c.bold}oscar --model${c.reset}${c.dim} instead — it edits the .env.${c.reset}`,
+    );
     return null;
   }
 
@@ -210,4 +227,17 @@ if (isMain) {
   runSwitchPicker()
     .then((m) => { process.exitCode = m ? 0 : 1; })
     .catch((err) => { console.error(err); process.exitCode = 1; });
+}
+/** Does the active config actually run a proxy? The Anthropic modes talk to
+ * the vendor directly, so there is nothing listening to swap a model on. */
+export function usesProxy(): boolean {
+  const file = envFilePath();
+  if (!existsSync(file)) return true;
+  try {
+    const env = parseEnvText(readFileSync(file, "utf8"));
+    if (["1", "true", "yes", "on"].includes((env.USE_OPENAI_API ?? "").toLowerCase())) return true;
+    return ["1", "true", "yes", "on"].includes((env.OSCAR_PROXY ?? "").toLowerCase());
+  } catch {
+    return true;
+  }
 }
