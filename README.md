@@ -1,8 +1,6 @@
 <div align="center">
 
-# O.S.C.A.R.
-
-**O**rchestrator for **S**ystem **C**oding & **A**utonomous **R**outing
+# claude-code-free
 
 *Run Claude Code against any model you want — local Ollama, DeepSeek, OpenAI, LM Studio, vLLM — without patching a single line of Claude Code.*
 
@@ -18,13 +16,13 @@
 
 Claude Code is an excellent coding agent — the tools, the agent loop, the terminal UI, the permission model. It is also hard-wired to Anthropic's API.
 
-O.S.C.A.R. is a **local translation proxy** that sits in between. Claude Code thinks it is talking to `api.anthropic.com`; O.S.C.A.R. converts every request into OpenAI Chat Completions format and forwards it to whatever backend you actually want.
+claude-code-free is a **local translation proxy** that sits in between. Claude Code thinks it is talking to `api.anthropic.com`; claude-code-free converts every request into OpenAI Chat Completions format and forwards it to whatever backend you actually want.
 
 You keep the entire Claude Code experience. You change only which model answers.
 
 ```
-  Claude Code                O.S.C.A.R. (localhost:8787)          your backend
-  ───────────                ───────────────────────────          ────────────
+  Claude Code                claude-code-free (localhost:8787)    your backend
+  ───────────                ─────────────────────────────────    ────────────
   ANTHROPIC_BASE_URL ──────► GET  /v1/models      ───────────────► GET  /models
   ANTHROPIC_API_KEY=dummy    POST /v1/messages    ──translate────► POST /chat/completions
                              POST /v1/messages/count_tokens
@@ -36,7 +34,7 @@ You keep the entire Claude Code experience. You change only which model answers.
 
 Most "use Claude Code with another model" setups give you a working proxy and a broken `/model` command — you edit a config file and restart to change models.
 
-O.S.C.A.R. makes `/model` work. Every model on every configured backend shows up in Claude Code's own picker, switchable mid-session:
+claude-code-free makes `/model` work. Every model on every configured backend shows up in Claude Code's own picker, switchable mid-session:
 
 ```
   qwen2.5:7b           (local)
@@ -58,7 +56,7 @@ O.S.C.A.R. makes `/model` work. Every model on every configured backend shows up
 | **Reasoning models** | Surfaces chain-of-thought when `content` comes back empty, so no blank replies |
 | **Local token counting** | Claude Code keeps accurate context accounting |
 | **Per-model token ceilings** | Cap a small local model without touching the others |
-| **Health checks** | `oscar --doctor` proves the setup works with a real completion |
+| **Health checks** | `claude-code-free --doctor` proves the setup works with a real completion |
 | **Passthrough mode** | Flip one flag and every request goes to the real Anthropic API, untouched |
 
 ---
@@ -83,11 +81,11 @@ npm pack
 ```
 
 ```bash
-npm install -g ./oscar-0.1.0.tgz
+npm install -g ./claude-code-free-0.1.0.tgz
 ```
 
 ```bash
-rm oscar-0.1.0.tgz
+rm claude-code-free-0.1.0.tgz
 ```
 
 > **Why `npm pack` first?** `npm install -g .` on a local path creates a *symlink* to your working tree, not an installation. Packing first gives you a genuine copy containing only `src/`, `bin/` and `scripts/` — 25 files, ~43 kB.
@@ -100,7 +98,7 @@ npm install && npm link
 
 ### Windows note
 
-Everything above is identical in PowerShell except path separators (`.\oscar-0.1.0.tgz`). If PowerShell refuses to run the generated shim, its execution policy is too strict:
+Everything above is identical in PowerShell except path separators (`.\claude-code-free-0.1.0.tgz`). If PowerShell refuses to run the generated shim, its execution policy is too strict:
 
 ```bash
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
@@ -109,29 +107,29 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ## Setup
 
 ```bash
-oscar --setup
+claude-code-free --setup
 ```
 
-The wizard asks for a provider, collects a key and model, then **sends one real one-token completion to prove it works** before writing `~/.oscar/.env`.
+The wizard asks for a provider, collects a key and model, then **sends one real one-token completion to prove it works** before writing `~/.claude-code-free/.env`.
 
 That last check matters more than it sounds — see [Why listing models proves nothing](#why-listing-models-proves-nothing).
 
 Verify:
 
 ```bash
-oscar --doctor
+claude-code-free --doctor
 ```
 
 Run it:
 
 ```bash
-oscar
+claude-code-free
 ```
 
 Any extra arguments pass straight through to Claude Code:
 
 ```bash
-oscar -p "explain the architecture of this repo"
+claude-code-free -p "explain the architecture of this repo"
 ```
 
 ---
@@ -140,15 +138,15 @@ oscar -p "explain the architecture of this repo"
 
 | Command | What it does |
 |---|---|
-| `oscar` | Start the proxy and launch Claude Code against it |
-| `oscar --setup` | Interactive wizard; writes `~/.oscar/.env` |
-| `oscar --doctor` | Check every backend, ending with a live completion. Exits non-zero on failure |
-| `oscar --model` | Pick a model and write it to `.env` |
-| `oscar --switch` | Hot-swap the model on a **running** proxy, from a second terminal |
+| `claude-code-free` | Start the proxy and launch Claude Code against it |
+| `claude-code-free --setup` | Interactive wizard; writes `~/.claude-code-free/.env` |
+| `claude-code-free --doctor` | Check every backend, ending with a live completion. Exits non-zero on failure |
+| `claude-code-free --model` | Pick a model and write it to `.env` |
+| `claude-code-free --switch` | Hot-swap the model on a **running** proxy, from a second terminal |
 
 ## Configuration
 
-### Single backend — `~/.oscar/.env`
+### Single backend — `~/.claude-code-free/.env`
 
 | Variable | Purpose | Default |
 |---|---|---|
@@ -156,7 +154,7 @@ oscar -p "explain the architecture of this repo"
 | `OPENAI_BASE_URL` | Backend base URL | `https://api.openai.com/v1` |
 | `OPENAI_API_KEY` | Backend key | required when routing |
 | `OPENAI_MODEL` | Default model | required when routing |
-| `OSCAR_MAX_OUTPUT_TOKENS` | Clamp on `max_tokens` — Claude Code asks for a 200k-context budget | unset (no clamp) |
+| `CCF_MAX_OUTPUT_TOKENS` | Clamp on `max_tokens` — Claude Code asks for a 200k-context budget | unset (no clamp) |
 | `PROXY_PORT` | Port the proxy listens on | `8787` |
 | `ANTHROPIC_API_KEY` | Used only in passthrough mode | — |
 
@@ -170,7 +168,7 @@ OPENAI_MODEL=qwen2.5:7b
 PROXY_PORT=8787
 ```
 
-### Multiple backends — `~/.oscar/providers.json`
+### Multiple backends — `~/.claude-code-free/providers.json`
 
 ```json
 {
@@ -195,7 +193,7 @@ PROXY_PORT=8787
 
 Every backend is probed together and appears in one picker as `model  (provider)`. Each request uses that provider's own base URL and key. Two backends serving the same model name stay individually addressable.
 
-Output-token ceilings resolve **model → provider → `OSCAR_MAX_OUTPUT_TOKENS`**.
+Output-token ceilings resolve **model → provider → `CCF_MAX_OUTPUT_TOKENS`**.
 
 Without a `providers.json`, the flat `.env` is used as a single provider — nothing changes for existing setups.
 
@@ -205,9 +203,9 @@ Without a `providers.json`, the flat `.env` is used as a single provider — not
 
 ### 1. Launch
 
-`oscar` performs nine steps:
+`claude-code-free` performs nine steps:
 
-1. Load `~/.oscar/.env`
+1. Load `~/.claude-code-free/.env`
 2. Spawn the proxy (`src/server.ts`) as a child process
 3. Poll `/healthz` until it answers
 4. Set `ANTHROPIC_BASE_URL` to the proxy
@@ -229,12 +227,12 @@ Then it applies this filter to the ids it got back:
 data.filter((m) => /^(claude|anthropic)/i.test(m.id))
 ```
 
-Anything else is silently discarded — which would drop every Ollama model on the floor. So O.S.C.A.R. advertises each model under an alias that survives the filter, and puts the real name in `display_name`, which is what the picker actually renders:
+Anything else is silently discarded — which would drop every Ollama model on the floor. So claude-code-free advertises each model under an alias that survives the filter, and puts the real name in `display_name`, which is what the picker actually renders:
 
 | Sent as `id` | Shown in `/model` |
 |---|---|
-| `claude-oscar-local-qwen2.5-7b` | `qwen2.5:7b  (local)` |
-| `claude-oscar-cloud-glm-5.2` | `glm-5.2  (cloud)` |
+| `claude-ccf-local-qwen2.5-7b` | `qwen2.5:7b  (local)` |
+| `claude-ccf-cloud-glm-5.2` | `glm-5.2  (cloud)` |
 
 Because that fetch happens *once*, a backend that is merely slow on its first request would be missing from `/model` for the entire session. That is why the catalog is warmed at boot with a 15-second budget while the request path keeps a 2.5-second one, and why a partial result is cached for 5 seconds instead of 60.
 
@@ -258,7 +256,7 @@ src/
 ├── proxy.ts         Routing: which provider, which model, error envelopes
 ├── openaiShim.ts    Anthropic ↔ OpenAI translation (pure functions)
 ├── stream.ts        OpenAI SSE → Anthropic event stream
-├── catalog.ts       Model discovery + `claude-oscar-…` aliases
+├── catalog.ts       Model discovery + `claude-ccf-…` aliases
 ├── providers.ts     Multi-backend config
 ├── tokens.ts        Local token estimation
 ├── preflight.ts     Live backend verification
@@ -292,19 +290,19 @@ Failed to authenticate. API Error: 401 {"error":"Unauthorized"}
 
 — which reads as *Claude Code's* login expiring, sending you to debug entirely the wrong thing.
 
-O.S.C.A.R. handles this in three places: the wizard sends a real completion before writing config, `--doctor` does the same on demand, and the proxy wraps upstream 401s so the message names your backend and the responsible provider.
+claude-code-free handles this in three places: the wizard sends a real completion before writing config, `--doctor` does the same on demand, and the proxy wraps upstream 401s so the message names your backend and the responsible provider.
 
 ## Troubleshooting
 
-**`oscar: command not found`** — your npm global directory isn't on `PATH`. Find it with `npm prefix -g` and add it.
+**`claude-code-free: command not found`** — your npm global directory isn't on `PATH`. Find it with `npm prefix -g` and add it.
 
-**`/model` shows no backend models** — check the proxy's startup log for `models: N across M backend(s)`. If a provider is named as not answering, run `oscar --doctor`.
+**`/model` shows no backend models** — check the proxy's startup log for `models: N across M backend(s)`. If a provider is named as not answering, run `claude-code-free --doctor`.
 
-**401 mid-conversation** — your backend rejected its key. `oscar --doctor` will name which provider and why.
+**401 mid-conversation** — your backend rejected its key. `claude-code-free --doctor` will name which provider and why.
 
 **Model works in `--doctor` but not in Claude Code** — the model name in `.env` may not match what the backend serves. Ollama's local naming (`glm-5.2:cloud`) differs from the cloud API's (`glm-5.2`). `--doctor` reports the closest match.
 
-**Blank replies from a reasoning model** — its token budget is being consumed by reasoning. Raise `max_tokens`, or set `OSCAR_MAX_OUTPUT_TOKENS` higher.
+**Blank replies from a reasoning model** — its token budget is being consumed by reasoning. Raise `max_tokens`, or set `CCF_MAX_OUTPUT_TOKENS` higher.
 
 ---
 
@@ -340,4 +338,4 @@ Verified with Claude Code **2.1.219**. Model discovery relies on Claude Code's g
 
 MIT — see [LICENSE.md](LICENSE.md).
 
-O.S.C.A.R. is not affiliated with or endorsed by Anthropic. Claude Code is Anthropic's software, used here unmodified.
+claude-code-free is not affiliated with or endorsed by Anthropic. Claude Code is Anthropic's software, used here unmodified.

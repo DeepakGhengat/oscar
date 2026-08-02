@@ -27,8 +27,8 @@ let providerDir = "";
 let prevConfigDir: string | undefined;
 
 before(() => {
-  prevConfigDir = process.env.OSCAR_CONFIG;
-  providerDir = mkdtempSync(join(tmpdir(), "oscar-probe-"));
+  prevConfigDir = process.env.CLAUDE_CODE_FREE_CONFIG;
+  providerDir = mkdtempSync(join(tmpdir(), "ccf-probe-"));
   writeFileSync(
     join(providerDir, "providers.json"),
     JSON.stringify({
@@ -41,8 +41,8 @@ before(() => {
 });
 
 after(() => {
-  if (prevConfigDir === undefined) delete process.env.OSCAR_CONFIG;
-  else process.env.OSCAR_CONFIG = prevConfigDir;
+  if (prevConfigDir === undefined) delete process.env.CLAUDE_CODE_FREE_CONFIG;
+  else process.env.CLAUDE_CODE_FREE_CONFIG = prevConfigDir;
   try {
     rmSync(providerDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   } catch {
@@ -98,13 +98,13 @@ beforeEach(() => {
   clearCatalogCache();
   // Most tests exercise the flat single-provider path; the multi-provider ones
   // opt in by pointing at providerDir.
-  delete process.env.OSCAR_CONFIG;
+  delete process.env.CLAUDE_CODE_FREE_CONFIG;
 });
 
 afterEach(() => {
   globalThis.fetch = realFetch;
   clearCatalogCache();
-  delete process.env.OSCAR_CONFIG;
+  delete process.env.CLAUDE_CODE_FREE_CONFIG;
 });
 
 test("getCatalog probes {baseURL}/models and aliases what it finds", async () => {
@@ -227,7 +227,7 @@ test("warmCatalog fills the cache so the first request is served from it", async
 test("a partial result is retried sooner than a complete one", async () => {
   // Regression: a slow backend dropped out of a cached catalog for a full 60s,
   // and Claude Code only fetches the picker once — so it stayed missing.
-  process.env.OSCAR_CONFIG = providerDir;
+  process.env.CLAUDE_CODE_FREE_CONFIG = providerDir;
   let cloudUp = false;
   stubFetch((url) => {
     if (url.startsWith("http://local")) return { ok: true, body: { data: [{ id: "local-model" }] } };
@@ -252,7 +252,7 @@ test("a partial result is retried sooner than a complete one", async () => {
 });
 
 test("providers are probed concurrently, not one after another", async () => {
-  process.env.OSCAR_CONFIG = providerDir;
+  process.env.CLAUDE_CODE_FREE_CONFIG = providerDir;
   let inFlight = 0;
   let maxInFlight = 0;
   globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {

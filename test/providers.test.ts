@@ -31,14 +31,14 @@ const cfg: ProxyConfig = {
 };
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "oscar-prov-"));
-  prevConfig = process.env.OSCAR_CONFIG;
-  process.env.OSCAR_CONFIG = dir;
+  dir = mkdtempSync(join(tmpdir(), "ccf-prov-"));
+  prevConfig = process.env.CLAUDE_CODE_FREE_CONFIG;
+  process.env.CLAUDE_CODE_FREE_CONFIG = dir;
 });
 
 afterEach(() => {
-  if (prevConfig === undefined) delete process.env.OSCAR_CONFIG;
-  else process.env.OSCAR_CONFIG = prevConfig;
+  if (prevConfig === undefined) delete process.env.CLAUDE_CODE_FREE_CONFIG;
+  else process.env.CLAUDE_CODE_FREE_CONFIG = prevConfig;
   try {
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   } catch {

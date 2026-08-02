@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Global launcher for oscar.
+// Global launcher for claude-code-free.
 // Cross-platform Node replacement for scripts/run.ps1 + scripts/run.sh.
 //
 // Flow:
-//   1. Resolve config dir (~/.oscar, or $OSCAR_CONFIG)
+//   1. Resolve config dir (~/.claude-code-free, or $CLAUDE_CODE_FREE_CONFIG)
 //   2. Load .env from there into the process environment
 //   3. Handle `--setup`: run the wizard and exit
 //   4. Refuse to launch without config
@@ -26,8 +26,8 @@ const PKG_ROOT = resolve(dirname(__filename), "..");
 /* --------------------------- config location ----------------------------- */
 
 function configDir() {
-  if (process.env.OSCAR_CONFIG) return process.env.OSCAR_CONFIG;
-  return join(homedir(), ".oscar");
+  if (process.env.CLAUDE_CODE_FREE_CONFIG) return process.env.CLAUDE_CODE_FREE_CONFIG;
+  return join(homedir(), ".claude-code-free");
 }
 
 function envPath() {
@@ -157,7 +157,7 @@ async function main() {
   if (args.includes("--setup")) {
     const dir = configDir();
     mkdirSync(dir, { recursive: true });
-    process.env.OSCAR_CONFIG = dir;
+    process.env.CLAUDE_CODE_FREE_CONFIG = dir;
     const tsx = findTsx();
     const setupTs = join(PKG_ROOT, "src", "setup.ts");
     if (tsx) {
@@ -165,7 +165,7 @@ async function main() {
     } else {
       await runNode(["tsx", setupTs], { stdio: "inherit", useNpx: true });
     }
-    process.exit(process.env.OSCAR_SETUP_EXIT ?? 0);
+    process.exit(process.env.CCF_SETUP_EXIT ?? 0);
   }
 
   // --model: probe the configured backend, let the user pick a model,
@@ -174,8 +174,8 @@ async function main() {
   // and exit — the user can launch separately.
   if (args.includes("--model")) {
     const dir = configDir();
-    if (process.env.OSCAR_CONFIG === undefined) {
-      process.env.OSCAR_CONFIG = dir;
+    if (process.env.CLAUDE_CODE_FREE_CONFIG === undefined) {
+      process.env.CLAUDE_CODE_FREE_CONFIG = dir;
     }
     const tsx = findTsx();
     const pickerTs = join(PKG_ROOT, "src", "modelpicker.ts");
@@ -184,7 +184,7 @@ async function main() {
     } else {
       await runNode(["tsx", pickerTs], { stdio: "inherit", useNpx: true });
     }
-    process.exit(process.env.OSCAR_SETUP_EXIT ?? 0);
+    process.exit(process.env.CCF_SETUP_EXIT ?? 0);
   }
 
   // --doctor: check the config end to end (including a real completion, which
@@ -192,8 +192,8 @@ async function main() {
   // listing is public) and exit.
   if (args.includes("--doctor")) {
     const dir = configDir();
-    if (process.env.OSCAR_CONFIG === undefined) {
-      process.env.OSCAR_CONFIG = dir;
+    if (process.env.CLAUDE_CODE_FREE_CONFIG === undefined) {
+      process.env.CLAUDE_CODE_FREE_CONFIG = dir;
     }
     const tsx = findTsx();
     const doctorTs = join(PKG_ROOT, "src", "doctor.ts");
@@ -202,16 +202,16 @@ async function main() {
     } else {
       await runNode(["tsx", doctorTs], { stdio: "inherit", useNpx: true });
     }
-    process.exit(Number(process.env.OSCAR_SETUP_EXIT ?? 0));
+    process.exit(Number(process.env.CCF_SETUP_EXIT ?? 0));
   }
 
-  // --switch: talk to a *running* proxy's /_oscar/ control endpoints and
+  // --switch: talk to a *running* proxy's /_ccf/ control endpoints and
   // hot-swap the backend model live, without restarting claude. Use from a
   // second terminal while claude is running in the first.
   if (args.includes("--switch")) {
     const dir = configDir();
-    if (process.env.OSCAR_CONFIG === undefined) {
-      process.env.OSCAR_CONFIG = dir;
+    if (process.env.CLAUDE_CODE_FREE_CONFIG === undefined) {
+      process.env.CLAUDE_CODE_FREE_CONFIG = dir;
     }
     const tsx = findTsx();
     const switchTs = join(PKG_ROOT, "src", "switchpick.ts");
@@ -220,7 +220,7 @@ async function main() {
     } else {
       await runNode(["tsx", switchTs], { stdio: "inherit", useNpx: true });
     }
-    process.exit(process.env.OSCAR_SETUP_EXIT ?? 0);
+    process.exit(process.env.CCF_SETUP_EXIT ?? 0);
   }
 
   // Load config.
@@ -228,7 +228,7 @@ async function main() {
   if (!existsSync(envPath())) {
     console.error(
       `No config found at ${envPath()}.\n` +
-      `Run 'oscar --setup' first to configure your backend.`,
+      `Run 'claude-code-free --setup' first to configure your backend.`,
     );
     process.exit(1);
   }
@@ -256,7 +256,7 @@ async function main() {
   const proxySpawnArgs = tsx ? proxyArgs : ["tsx", ...proxyArgs];
 
   // Make sure the proxy loads the same config dir.
-  const proxyEnv = { ...process.env, OSCAR_CONFIG: configDir() };
+  const proxyEnv = { ...process.env, CLAUDE_CODE_FREE_CONFIG: configDir() };
   const proxy = spawn(proxyCmd, proxySpawnArgs, {
     env: proxyEnv,
     stdio: "inherit",
@@ -286,14 +286,14 @@ async function main() {
   process.env.ANTHROPIC_BASE_URL = `http://localhost:${port}`;
   process.env.ANTHROPIC_REAL_BASE_URL = "https://api.anthropic.com";
   if (isTruthy(process.env.USE_OPENAI_API)) {
-    process.env.ANTHROPIC_API_KEY = "oscar-dummy-key";
+    process.env.ANTHROPIC_API_KEY = "claude-code-free-dummy-key";
     // Make the backend's models show up in /model. Claude Code only performs
     // gateway model discovery (GET $ANTHROPIC_BASE_URL/v1/models) when this is
     // set; the other preconditions — first-party provider and a base URL that
     // isn't api.anthropic.com — already hold here.
     process.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1";
     // Bypass stored expired OAuth credentials so the env-var key is used.
-    const cleanConfig = join(homedir(), ".oscar", "claude-config");
+    const cleanConfig = join(homedir(), ".claude-code-free", "claude-config");
     mkdirSync(cleanConfig, { recursive: true });
     process.env.CLAUDE_CONFIG_DIR = cleanConfig;
     // claude persists API-key rejections into .claude.json's
@@ -308,7 +308,7 @@ async function main() {
         let changed = false;
         if (data.customApiKeyResponses && Array.isArray(data.customApiKeyResponses.rejected)) {
           const filtered = data.customApiKeyResponses.rejected.filter(
-            (k) => k !== "oscar-dummy-key" && k !== "-code-free-dummy-key",
+            (k) => k !== "claude-code-free-dummy-key" && k !== "-code-free-dummy-key",
           );
           if (filtered.length !== data.customApiKeyResponses.rejected.length) {
             data.customApiKeyResponses.rejected = filtered;
@@ -349,7 +349,7 @@ function runNode(args, opts) {
     const cmd = opts.useNpx ? (process.platform === "win32" ? "npx.cmd" : "npx") : process.execPath;
     const child = spawn(cmd, args, { stdio: opts.stdio || "inherit", env: process.env });
     child.on("exit", (code) => {
-      process.env.OSCAR_SETUP_EXIT = String(code ?? 0);
+      process.env.CCF_SETUP_EXIT = String(code ?? 0);
       resolvePromise(code ?? 0);
     });
   });
@@ -360,7 +360,7 @@ function runNode(args, opts) {
  * Compare *real* paths. A global install links the package into npm's
  * node_modules, so argv[1] arrives as the symlinked path while
  * import.meta.url resolves to the real one — comparing them directly makes
- * the global `oscar` command exit silently doing nothing. */
+ * the global `claude-code-free` command exit silently doing nothing. */
 export function isCliEntry(argv1, self) {
   if (!argv1) return false;
   const real = (p) => {

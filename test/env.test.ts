@@ -13,7 +13,7 @@ const KEYS = [
   "OPENAI_API_KEY",
   "OPENAI_MODEL",
   "OPENAI_BASE_URL",
-  "OSCAR_MAX_OUTPUT_TOKENS",
+  "CCF_MAX_OUTPUT_TOKENS",
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_BASE_URL",
   "ANTHROPIC_REAL_BASE_URL",
@@ -161,21 +161,21 @@ test("PROXY_PORT parses, and defaults to 8787", () => {
 
 /* --------------------------- output-token clamp --------------------------- */
 
-test("OSCAR_MAX_OUTPUT_TOKENS is honored when it's a usable number", () => {
+test("CCF_MAX_OUTPUT_TOKENS is honored when it's a usable number", () => {
   enableOpenAI();
-  process.env.OSCAR_MAX_OUTPUT_TOKENS = "4096";
+  process.env.CCF_MAX_OUTPUT_TOKENS = "4096";
   assert.equal(loadConfig().maxOutputTokens, 4096);
 });
 
 test("a missing or nonsense clamp means no clamp, never a broken one", () => {
   enableOpenAI();
-  // An accidental `OSCAR_MAX_OUTPUT_TOKENS=abc` must not become NaN and silently
+  // An accidental `CCF_MAX_OUTPUT_TOKENS=abc` must not become NaN and silently
   // zero out every request's max_tokens.
   for (const v of ["", "   ", "abc", "0", "-1", "NaN"]) {
-    process.env.OSCAR_MAX_OUTPUT_TOKENS = v;
+    process.env.CCF_MAX_OUTPUT_TOKENS = v;
     assert.equal(loadConfig().maxOutputTokens, null, `${JSON.stringify(v)} should disable the clamp`);
   }
-  delete process.env.OSCAR_MAX_OUTPUT_TOKENS;
+  delete process.env.CCF_MAX_OUTPUT_TOKENS;
   assert.equal(loadConfig().maxOutputTokens, null);
 });
 
@@ -193,7 +193,7 @@ test("every ProxyConfig field is populated", () => {
   enableOpenAI();
   process.env.OPENAI_BASE_URL = "http://localhost:11434/v1";
   process.env.ANTHROPIC_API_KEY = "ant-key";
-  process.env.OSCAR_MAX_OUTPUT_TOKENS = "2048";
+  process.env.CCF_MAX_OUTPUT_TOKENS = "2048";
   process.env.PROXY_PORT = "8080";
   assert.deepEqual(loadConfig(), {
     useOpenAI: true,
