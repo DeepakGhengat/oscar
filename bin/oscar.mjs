@@ -423,8 +423,17 @@ async function main() {
   // OSCAR_PROXY=1 opts back into routing through the proxy — useful for the
   // request log — and the proxy forwards the CLI's credentials untouched.
   if (isSubscriptionAuth() && !isTruthy(process.env.OSCAR_PROXY)) {
-    console.log("Subscription sign-in: launching the CLI with its own credentials.");
-    console.log(`${"Run /login inside the CLI if you are not signed in yet."}`);
+    // Subscription mode keeps the CLI's real profile so the user's own login
+    // works — but it still deserves our status line, and it should not replay
+    // first-run onboarding on every launch. Seeding only fills in gaps, so
+    // nothing the user has already chosen is touched.
+    const profile = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+    try {
+      mkdirSync(profile, { recursive: true });
+      seedClaudeProfile(profile, `node "${join(PKG_ROOT, "bin", "oscar-statusline.mjs")}"`);
+    } catch {
+      // A read-only or unusual profile is not worth failing the launch over.
+    }
     launchCli(args);
     return;
   }
