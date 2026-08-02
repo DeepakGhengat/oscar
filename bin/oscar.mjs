@@ -73,6 +73,20 @@ export function approveApiKey(dir, key) {
   return data;
 }
 
+/** Both worlds at once: an OpenAI-compatible backend *and* the Anthropic
+ * account, selectable from one `/model` list.
+ *
+ * Mirrors the `hybrid` field in src/env.ts. The Anthropic side must be
+ * configured deliberately — inferring it from an absent key would turn this on
+ * for every plain OpenAI setup, and the CLI opens on an Anthropic tier, so the
+ * first message would call a vendor the user never signed in to. */
+export function isHybrid(env = process.env) {
+  if (!isTruthy(env.USE_OPENAI_API)) return false;
+  const declared = (env.OSCAR_AUTH ?? "").trim().toLowerCase();
+  if (["subscription", "oauth", "sso", "login"].includes(declared)) return true;
+  return Boolean((env.ANTHROPIC_API_KEY ?? "").trim());
+}
+
 /** Is the CLI signing itself in against the vendor cloud, rather than us
  * holding an API key? Mirrors resolveUpstreamAuth() in src/env.ts: an explicit
  * OSCAR_AUTH wins, otherwise no key configured means the CLI must be. */
@@ -562,13 +576,34 @@ async function main() {
   process.env.ANTHROPIC_BASE_URL = `http://localhost:${port}`;
   process.env.OSCAR_UPSTREAM_BASE_URL = "https://api.anthropic.com";
   if (isTruthy(process.env.USE_OPENAI_API)) {
-    process.env.ANTHROPIC_API_KEY = DUMMY_KEY;
     // Make the backend's models show up in /model. The CLI only performs
     // gateway model discovery (GET $ANTHROPIC_BASE_URL/v1/models) when this is
     // set; the other preconditions — first-party provider and a base URL that
     // isn't api.anthropic.com — already hold here. The variable name is the
     // CLI's, not ours.
     process.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1";
+
+    // Hybrid: both worlds in one picker. Backend models are translated, and
+    // an Anthropic tier id goes to the vendor on the CLI's own credentials —
+    // which only works if we leave those credentials alone. So no placeholder
+    // key and no throwaway profile here: substituting either is exactly what
+    // would break the half of the picker this mode exists to provide.
+    if (isHybrid()) {
+      console.log(
+        `${C.dim}Hybrid: backend models and your Anthropic account in one ${C.reset}/model${C.dim} list.${C.reset}`,
+      );
+      const profile = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+      try {
+        mkdirSync(profile, { recursive: true });
+        seedClaudeProfile(profile, `node "${join(PKG_ROOT, "bin", "oscar-statusline.mjs")}"`);
+      } catch {
+        // A read-only profile is not worth failing the launch over.
+      }
+      launchCli(args, killProxy, port);
+      return;
+    }
+
+    process.env.ANTHROPIC_API_KEY = DUMMY_KEY;
     // Bypass stored expired OAuth credentials so the env-var key is used.
     const cleanConfig = join(homedir(), ".oscar", "cli-profile");
     mkdirSync(cleanConfig, { recursive: true });

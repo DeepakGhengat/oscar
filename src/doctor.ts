@@ -111,6 +111,22 @@ export async function runDoctor(): Promise<boolean> {
   const defaultModel = env.OPENAI_MODEL ?? "";
   let ok = true;
 
+  // Hybrid: both worlds in one picker, so say which half is which. Otherwise a
+  // request landing at Anthropic looks like the routing is broken.
+  const declaredAuth = (env.OSCAR_AUTH ?? "").trim().toLowerCase();
+  if (["subscription", "oauth", "sso", "login"].includes(declaredAuth) || env.ANTHROPIC_API_KEY) {
+    console.log(`${PASS} hybrid — one /model list spanning both`);
+    console.log(`  ${c.dim}backend models below are translated;${c.reset}`);
+    console.log(
+      `  ${c.dim}Anthropic models go to the vendor on ${
+        env.ANTHROPIC_API_KEY ? "your API key" : "the CLI's own sign-in"
+      }.${c.reset}`,
+    );
+    if (!env.ANTHROPIC_API_KEY && hasStoredLogin() === false) {
+      console.log(`${WARN} no stored login found — Anthropic models will fail until you run /login`);
+    }
+  }
+
   // The provider list is whatever the proxy itself would use: providers.json
   // when present, else the flat OPENAI_* config as a single "default".
   const { providers, errors } = loadProviders({
@@ -122,6 +138,7 @@ export async function runDoctor(): Promise<boolean> {
     upstreamKey: null,
     upstreamBaseURL: "https://api.anthropic.com",
     upstreamAuth: "api-key",
+    hybrid: false,
     port: Number(env.PROXY_PORT ?? 8787),
   });
   for (const e of errors) {

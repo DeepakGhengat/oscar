@@ -42,6 +42,9 @@ export interface SetupConfig {
   upstreamKey: string | null;
   /** Set when the CLI signs itself in and holds no key on our side. */
   subscription?: boolean;
+  /** Keep the Anthropic account available alongside the backend, so one
+   * `/model` list spans both. */
+  hybrid?: boolean;
   port: number;
 }
 
@@ -61,8 +64,9 @@ export function formatEnv(cfg: SetupConfig): string {
     lines.push(`OPENAI_MODEL=${cfg.openAIModel ?? ""}`);
     lines.push(`OPENAI_BASE_URL=${cfg.openAIBaseURL ?? ""}`);
   }
-  if (cfg.subscription) {
+  if (cfg.subscription || cfg.hybrid) {
     // No key to store: the CLI signs itself in and refreshes its own token.
+    // Alongside USE_OPENAI_API=1 this is what turns on hybrid routing.
     lines.push(`OSCAR_AUTH=subscription`);
   }
   if (cfg.upstreamKey) {
@@ -229,10 +233,25 @@ export async function main(): Promise<void> {
     }
   }
 
-  const cfg: SetupConfig = { useOpenAI, openAIKey, openAIModel, openAIBaseURL, upstreamKey, subscription, port };
+  // Both worlds in one picker. Opt-in, and default no: the CLI opens on an
+  // Anthropic tier, so switching this on without a Claude plan would make the
+  // very first message fail against a vendor the user never signed in to.
+  let hybrid = false;
+  if (useOpenAI) {
+    console.log(
+      `\n${c.dim}You can also keep your Anthropic account in the same ${c.reset}/model${c.dim} list,\n` +
+      `so one session switches between ${openAIModel ?? "backend models"} and Claude.\n` +
+      `Needs a Claude plan or an API key — the CLI signs itself in.${c.reset}`,
+    );
+    const both = (await ask(rl, "Include your Anthropic account in /model?", "n")).trim().toLowerCase();
+    hybrid = both.startsWith("y");
+  }
+
+  const cfg: SetupConfig = { useOpenAI, openAIKey, openAIModel, openAIBaseURL, upstreamKey, subscription, hybrid, port };
 
   const summary = useOpenAI
-    ? `provider:  ${preset.label}\nbase URL:  ${openAIBaseURL}\nmodel:     ${openAIModel}\nkey:       ${openAIKey ? openAIKey.slice(0, 4) + "..." : "(none)"}\nport:      ${port}`
+    ? `provider:  ${preset.label}\nbase URL:  ${openAIBaseURL}\nmodel:     ${openAIModel}\nkey:       ${openAIKey ? openAIKey.slice(0, 4) + "..." : "(none)"}\nport:      ${port}` +
+      (hybrid ? `\n/model:    backend models + your Anthropic account` : "")
     : subscription
       ? `provider:  ${preset.label}\nauth:      handled by the CLI (no key, no proxy)`
       : `provider:      ${preset.label}\nanthropic key: ${upstreamKey ? upstreamKey.slice(0, 4) + "..." : "(none)"}\nport:          ${port}`;

@@ -204,5 +204,9 @@ export interface ProxyConfig {
   upstreamKey: string | null;
   upstreamBaseURL: string;
   upstreamAuth: UpstreamAuthMode;
+  /** Both worlds in one `/model` picker: backend models are translated, and
+   * anything else — an Anthropic tier id — is passed through to the vendor on
+   * the CLI's own credentials. */
+  hybrid: boolean;
   port: number;
 }

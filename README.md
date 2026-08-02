@@ -7,7 +7,7 @@ O.S.C.A.R. is a local translation proxy that lets your coding CLI drive any Open
 Point the CLI at O.S.C.A.R. instead of the vendor API and every request is rewritten into OpenAI Chat Completions on the way out and back again on the way in — tools, streaming, images and token accounting included. Local Ollama, DeepSeek, OpenAI, LM Studio, vLLM, or several of them at once, all selectable from the CLI's own `/model` picker. Nothing about the CLI is patched.
 
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-354%20passing-2ea043)](#development)
+[![Tests](https://img.shields.io/badge/tests-366%20passing-2ea043)](#development)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Dependencies](https://img.shields.io/badge/runtime%20deps-1-8957e5)](package.json)
 [![Issues](https://img.shields.io/badge/issues-open-0969da)](https://github.com/DeepakGhengat/oscar/issues)
@@ -23,7 +23,7 @@ Point the CLI at O.S.C.A.R. instead of the vendor API and every request is rewri
 - **Several backends at once.** Local Ollama *and* DeepSeek *and* OpenAI in one list, each with its own base URL and key. Two backends serving the same model name stay individually addressable.
 - **It tells you when your key is wrong.** Listing models proves almost nothing — on many hosted backends that endpoint is public. O.S.C.A.R. verifies with a real completion during setup and on demand, so a bad key fails at setup instead of mid-conversation. [Why this matters](#why-listing-models-proves-nothing).
 - **Nothing is patched.** The CLI is launched unmodified, against a throwaway profile, and torn down cleanly. Flip one flag and every request goes to the real vendor API untouched.
-- **One dependency, no build step.** TypeScript run through `tsx`; 354 offline tests.
+- **One dependency, no build step.** TypeScript run through `tsx`; 366 offline tests.
 
 ## Quick Start
 
@@ -114,6 +114,32 @@ PROXY_PORT=8787
 ```
 
 Then run `oscar --doctor` before `oscar` — a hosted backend that lists models without a key will still reject a real completion, and the doctor is what catches that.
+
+### One `/model` list for everything
+
+Turn on **hybrid** and a single session holds your Claude plan *and* your backend models, switchable from `/model` at any time with no restart:
+
+```
+/model
+  Opus 5 (1M context)          ← your Claude Max plan
+  glm-5.2:cloud   (cloud)      ← Ollama Cloud
+  qwen2.5:7b      (local)      ← local Ollama
+```
+
+The proxy routes per request, on the model id: an alias it advertised goes to the backend and is translated; anything else is an Anthropic tier, so it goes to the vendor on the CLI's own sign-in, untouched.
+
+`oscar --setup` asks once, after the backend is configured. Or set it by hand — hybrid is just the two halves together:
+
+```bash
+USE_OPENAI_API=1                 # the backend half
+OPENAI_BASE_URL=https://ollama.com/v1
+OPENAI_API_KEY=...
+OPENAI_MODEL=glm-5.2:cloud
+OSCAR_AUTH=subscription          # the Anthropic half
+PROXY_PORT=8787
+```
+
+In this mode O.S.C.A.R. leaves your credentials alone — no placeholder key, no throwaway profile — because the Anthropic half authenticates as you. It needs a Claude plan (or `ANTHROPIC_API_KEY`); without one, picking a Claude model in `/model` will fail while backend models keep working.
 
 ### Switching between Anthropic and open models
 
@@ -379,7 +405,7 @@ Longer, symptom-first version: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md
 
 ```bash
 npm install
-npm test          # 354 tests, entirely offline
+npm test          # 366 tests, entirely offline
 npm run typecheck
 npm start         # run just the proxy, without the CLI
 ```
@@ -416,7 +442,7 @@ scripts/    Shell launchers and CLI vendoring
 commands/   Slash-command definition
 skills/     Skill definition
 docs/       Setup, provider and troubleshooting guides
-test/       354 tests
+test/       366 tests
 ```
 
 ## Compatibility
