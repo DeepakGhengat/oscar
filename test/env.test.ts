@@ -204,6 +204,7 @@ test("every ProxyConfig field is populated", () => {
     upstreamKey: "ant-key",
     upstreamBaseURL: "https://api.anthropic.com",
     upstreamAuth: "api-key",
+    hybrid: true,
     port: 8080,
   });
 });

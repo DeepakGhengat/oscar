@@ -28,6 +28,7 @@ const cfg: ProxyConfig = {
   upstreamKey: null,
   upstreamBaseURL: "https://api.anthropic.com",
   upstreamAuth: "api-key",
+  hybrid: false,
   port: 8787,
 };
 

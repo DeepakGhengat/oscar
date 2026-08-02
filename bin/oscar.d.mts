@@ -33,3 +33,5 @@ export declare function quoteForShell(s: string): string;
 export declare function apiKeyId(key: string | null | undefined): string;
 
 export declare function approveApiKey(dir: string, key: string): Record<string, unknown>;
+
+export declare function isHybrid(env?: Record<string, string | undefined>): boolean;
