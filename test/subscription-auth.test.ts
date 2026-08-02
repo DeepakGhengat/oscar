@@ -124,6 +124,25 @@ test("formatEnv: sign-in writes the auth mode and stores no key", () => {
   assert.doesNotMatch(out, /USE_OPENAI_API/);
 });
 
+test("formatEnv: sign-in records no port, because no proxy ever binds one", () => {
+  const out = formatEnv({
+    useOpenAI: false, openAIKey: null, openAIModel: null, openAIBaseURL: null,
+    upstreamKey: null, subscription: true, port: 8787,
+  });
+  assert.doesNotMatch(out, /PROXY_PORT/);
+  // The whole config is the comment and the mode — nothing else applies.
+  assert.equal(out.trim().split("\n").length, 2);
+});
+
+test("formatEnv: every mode that does run a proxy still records its port", () => {
+  for (const cfg of [
+    { useOpenAI: false, openAIKey: null, openAIModel: null, openAIBaseURL: null, upstreamKey: "sk-ant-x", port: 9000 },
+    { useOpenAI: true, openAIKey: "sk", openAIModel: "m", openAIBaseURL: "http://x/v1", upstreamKey: null, port: 9000 },
+  ]) {
+    assert.match(formatEnv(cfg), /^PROXY_PORT=9000$/m, JSON.stringify(cfg));
+  }
+});
+
 test("formatEnv: an api key config does not claim to be a sign-in", () => {
   const out = formatEnv({
     useOpenAI: false, openAIKey: null, openAIModel: null, openAIBaseURL: null,

@@ -36,11 +36,16 @@ export interface SetupConfig {
   port: number;
 }
 
+/** Default port for the local proxy, when one runs at all. */
+export const DEFAULT_PORT = 8787;
+
 /** Serialize a SetupConfig to .env text. */
 export function formatEnv(cfg: SetupConfig): string {
   const lines: string[] = [];
   lines.push(`# oscar config — written by src/setup.ts`);
-  lines.push(`PROXY_PORT=${cfg.port}`);
+  // Account sign-in launches the CLI directly — no proxy, so no port. Writing
+  // one would imply a local server that never starts.
+  if (!cfg.subscription) lines.push(`PROXY_PORT=${cfg.port}`);
   if (cfg.useOpenAI) {
     lines.push(`USE_OPENAI_API=1`);
     lines.push(`OPENAI_API_KEY=${cfg.openAIKey ?? ""}`);
@@ -129,25 +134,29 @@ export async function main(): Promise<void> {
   const idx = await select(rl, providerOptions, "Choose an LLM provider");
   const preset = PROVIDER_PRESETS[idx]!;
 
-  const port = Number(await ask(rl, "Proxy port", "8787")) || 8787;
-
   let useOpenAI = false;
   let openAIKey: string | null = null;
   let openAIModel: string | null = null;
   let openAIBaseURL: string | null = null;
   let upstreamKey: string | null = null;
   let subscription = false;
+  // Only meaningful when a proxy actually runs. Account sign-in launches the
+  // CLI directly, so nothing ever binds a port and asking for one is noise.
+  let port = DEFAULT_PORT;
 
   if (preset.kind === "subscription") {
     subscription = true;
     console.log(
-      `\n${c.dim}Nothing to collect — the CLI signs in against your Anthropic\n` +
-      `account and refreshes its own credentials. Run ${c.reset}${c.bold}/login${c.reset}${c.dim} inside the\n` +
-      `CLI if you are not signed in yet; SSO, Bedrock and Vertex work as usual.${c.reset}\n`,
+      `\n${c.dim}Nothing to collect — no key, no port, no local server.\n` +
+      `The CLI signs in against your Anthropic account and refreshes its own\n` +
+      `credentials. Run ${c.reset}${c.bold}/login${c.reset}${c.dim} inside the CLI if you are not signed in\n` +
+      `yet; SSO, Bedrock and Vertex work as usual.${c.reset}\n`,
     );
   } else if (preset.kind === "passthrough") {
+    port = Number(await ask(rl, "Proxy port", String(DEFAULT_PORT))) || DEFAULT_PORT;
     upstreamKey = await askRequired(rl, "Anthropic API key");
   } else {
+    port = Number(await ask(rl, "Proxy port", String(DEFAULT_PORT))) || DEFAULT_PORT;
     useOpenAI = true;
     openAIBaseURL = preset.baseURL
       ? await ask(rl, "Base URL", preset.baseURL)
@@ -204,7 +213,7 @@ export async function main(): Promise<void> {
   const summary = useOpenAI
     ? `provider:  ${preset.label}\nbase URL:  ${openAIBaseURL}\nmodel:     ${openAIModel}\nkey:       ${openAIKey ? openAIKey.slice(0, 4) + "..." : "(none)"}\nport:      ${port}`
     : subscription
-      ? `provider:  ${preset.label}\nauth:      handled by the CLI (no key stored)\nport:      ${port}`
+      ? `provider:  ${preset.label}\nauth:      handled by the CLI (no key, no proxy)`
       : `provider:      ${preset.label}\nanthropic key: ${upstreamKey ? upstreamKey.slice(0, 4) + "..." : "(none)"}\nport:          ${port}`;
   console.log(`\n${box(summary)}\n`);
 
@@ -224,15 +233,15 @@ export async function main(): Promise<void> {
     return;
   }
 
-  const start = (await ask(rl, "Start oscar now?", "Y")).toLowerCase();
   closeRl(rl);
-  if (start.startsWith("y") || start === "") {
-    console.log(`\n${c.dim}Run again anytime with: oscar${c.reset}`);
-    console.log(`${c.dim}Switch models with:      oscar --model${c.reset}`);
-  } else {
-    console.log(`\n${c.dim}Done. Run with: oscar${c.reset}`);
-    console.log(`${c.dim}Switch models with: oscar --model${c.reset}`);
-  }
+  console.log(`\n${c.dim}Run with: ${c.reset}${c.bold}oscar${c.reset}`);
+  // `--model` rewrites OPENAI_MODEL, which does not exist under account
+  // sign-in — there the CLI's own picker is the only thing that applies.
+  console.log(
+    subscription
+      ? `${c.dim}Switch models inside the CLI with ${c.reset}${c.bold}/model${c.reset}`
+      : `${c.dim}Switch models with: ${c.reset}${c.bold}oscar --model${c.reset}`,
+  );
 }
 
 // Run only when invoked directly.
