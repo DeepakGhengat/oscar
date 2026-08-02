@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "O.S.C.A.R. — Orchestrator for System Coding & Autonomous Routing. Runs your coding CLI against any OpenAI-compatible backend (Ollama, OpenAI, DeepSeek, LM Studio, vLLM).",
   "owner": {
-    "name": "LORDCYBERGOD"
+    "name": "Deepak Ghengat"
   },
   "plugins": [
     {
