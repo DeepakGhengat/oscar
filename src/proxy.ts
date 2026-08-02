@@ -61,12 +61,37 @@ async function resolveTarget(
   };
 }
 
-function upstreamAuthHeaders(cfg: ProxyConfig): Record<string, string> {
-  return {
-    "x-api-key": cfg.upstreamKey ?? "",
+/** True when the caller already carries usable credentials of its own.
+ *
+ * A subscription login (Pro/Max/Team, or enterprise SSO) reaches us as
+ * `Authorization: Bearer <oauth token>` and no `x-api-key` at all. Those
+ * tokens are short-lived and refreshed by the CLI, so they are the only
+ * credentials that can work — we have nothing equivalent to substitute. */
+export function callerIsAuthenticated(headers: Headers): boolean {
+  return (
+    (headers.get("authorization") ?? "").trim() !== "" ||
+    (headers.get("x-api-key") ?? "").trim() !== ""
+  );
+}
+
+/** Headers to force on a passthrough request.
+ *
+ * Only ever *adds* credentials, never replaces them. Injecting our own
+ * `x-api-key` next to a caller's bearer token makes the API reject the whole
+ * request — and an empty `x-api-key`, which is what a missing key used to
+ * produce, breaks it just as thoroughly. */
+export function upstreamAuthHeaders(
+  cfg: ProxyConfig,
+  incoming?: Headers,
+): Record<string, string> {
+  const headers: Record<string, string> = {
     "anthropic-version": MESSAGES_API_VERSION,
     "anthropic-dangerous-direct-browser-access": "true",
   };
+  if (cfg.upstreamAuth === "subscription") return headers;
+  if (incoming && callerIsAuthenticated(incoming)) return headers;
+  if (cfg.upstreamKey) headers["x-api-key"] = cfg.upstreamKey;
+  return headers;
 }
 
 /* --------------------------- OpenAI routing ------------------------------- */
@@ -216,8 +241,11 @@ async function passthroughUpstream(
     if (lk === "host" || lk === "content-length") continue;
     outHeaders.set(k, v);
   }
-  // Ensure auth headers are correct even if the CLI omitted them.
-  for (const [k, v] of Object.entries(upstreamAuthHeaders(cfg))) outHeaders.set(k, v);
+  // Fill in auth only where the caller left a gap; never overwrite what it sent.
+  for (const [k, v] of Object.entries(upstreamAuthHeaders(cfg, headers))) outHeaders.set(k, v);
+  // An empty x-api-key is worse than none — the API rejects it outright, which
+  // is how a signed-in CLI used to fail here.
+  if ((outHeaders.get("x-api-key") ?? "").trim() === "") outHeaders.delete("x-api-key");
   if (!outHeaders.has("content-type")) outHeaders.set("content-type", "application/json");
 
   const init: RequestInit = { method, headers: outHeaders };

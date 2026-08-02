@@ -6,11 +6,24 @@
 // looks like the CLI's own login expiring.
 
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { c } from "./ui.ts";
 import { envFilePath } from "./modelpicker.ts";
 import { probeModels } from "./setup.ts";
 import { isPlaceholderKey, isRemoteBackend, verifyBackend } from "./preflight.ts";
 import { loadProviders } from "./providers.ts";
+import { resolveUpstreamAuth } from "./env.ts";
+
+/** Has the CLI stored an account login? null when we cannot tell — on macOS
+ * the credentials live in the keychain, not on disk, so absence proves
+ * nothing and we say nothing rather than raise a false alarm. */
+export function hasStoredLogin(home = homedir(), platform = process.platform): boolean | null {
+  if (platform === "darwin") return null;
+  const dir = process.env.CLAUDE_CONFIG_DIR || join(home, ".claude");
+  if (!existsSync(dir)) return false;
+  return existsSync(join(dir, ".credentials.json"));
+}
 
 const PASS = `${c.green}✓${c.reset}`;
 const FAIL = `${c.red}✗${c.reset}`;
@@ -47,7 +60,25 @@ export async function runDoctor(): Promise<boolean> {
 
   const env = readEnvFile(file);
   if (!["1", "true", "yes", "on"].includes((env.USE_OPENAI_API ?? "").toLowerCase())) {
-    console.log(`${PASS} passthrough mode (USE_OPENAI_API is off) — nothing else to check`);
+    const auth = resolveUpstreamAuth(env.OSCAR_AUTH, env.ANTHROPIC_API_KEY || null);
+    if (auth === "subscription") {
+      console.log(`${PASS} account sign-in — the CLI authenticates itself, no key stored here`);
+      console.log(`  ${c.dim}Credentials live in the CLI's own config or your OS keychain.${c.reset}`);
+      console.log(`  ${c.dim}If requests are rejected, run /login inside the CLI.${c.reset}`);
+      const signedIn = hasStoredLogin();
+      if (signedIn === false) {
+        console.log(`${WARN} no stored login found — run /login inside the CLI`);
+      } else if (signedIn === true) {
+        console.log(`${PASS} stored login found`);
+      }
+      return true;
+    }
+    console.log(`${PASS} passthrough with an API key (USE_OPENAI_API is off)`);
+    if (!env.ANTHROPIC_API_KEY) {
+      console.log(`${FAIL} ANTHROPIC_API_KEY is empty — set it, or switch to account sign-in with OSCAR_AUTH=subscription`);
+      return false;
+    }
+    console.log(`${PASS} key: set (${env.ANTHROPIC_API_KEY.slice(0, 7)}...)`);
     return true;
   }
 
@@ -64,6 +95,7 @@ export async function runDoctor(): Promise<boolean> {
     maxOutputTokens: null,
     upstreamKey: null,
     upstreamBaseURL: "https://api.anthropic.com",
+    upstreamAuth: "api-key",
     port: Number(env.PROXY_PORT ?? 8787),
   });
   for (const e of errors) {

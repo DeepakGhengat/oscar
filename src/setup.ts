@@ -2,7 +2,8 @@
 // Pure helpers are exported for testing; main() runs the interactive loop.
 
 export type ProviderId =
-  | "openai" | "deepseek" | "ollama" | "lmstudio" | "vllm" | "custom" | "passthrough";
+  | "openai" | "deepseek" | "ollama" | "lmstudio" | "vllm" | "custom"
+  | "subscription" | "passthrough";
 
 export interface ProviderPreset {
   id: ProviderId;
@@ -10,7 +11,7 @@ export interface ProviderPreset {
   baseURL: string | null;
   defaultModel: string | null;
   keyHint: string | null;
-  kind: "cloud" | "local" | "custom" | "passthrough";
+  kind: "cloud" | "local" | "custom" | "subscription" | "passthrough";
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -20,7 +21,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   { id: "lmstudio",    label: "LM Studio (local)",     baseURL: "http://localhost:1234/v1",    defaultModel: null,          keyHint: "lm-studio",  kind: "local" },
   { id: "vllm",        label: "vLLM (local)",          baseURL: "http://localhost:8000/v1",    defaultModel: null,          keyHint: "vllm",       kind: "local" },
   { id: "custom",      label: "Custom OpenAI-compatible", baseURL: null,                       defaultModel: null,          keyHint: null,         kind: "custom" },
-  { id: "passthrough", label: "Passthrough to Anthropic", baseURL: null,                        defaultModel: null,          keyHint: null,         kind: "passthrough" },
+  { id: "subscription", label: "Anthropic account sign-in (Pro / Max / Team / SSO)", baseURL: null, defaultModel: null,      keyHint: null,         kind: "subscription" },
+  { id: "passthrough", label: "Anthropic API key",        baseURL: null,                          defaultModel: null,          keyHint: null,         kind: "passthrough" },
 ];
 
 export interface SetupConfig {
@@ -29,6 +31,8 @@ export interface SetupConfig {
   openAIModel: string | null;
   openAIBaseURL: string | null;
   upstreamKey: string | null;
+  /** Set when the CLI signs itself in and holds no key on our side. */
+  subscription?: boolean;
   port: number;
 }
 
@@ -42,6 +46,10 @@ export function formatEnv(cfg: SetupConfig): string {
     lines.push(`OPENAI_API_KEY=${cfg.openAIKey ?? ""}`);
     lines.push(`OPENAI_MODEL=${cfg.openAIModel ?? ""}`);
     lines.push(`OPENAI_BASE_URL=${cfg.openAIBaseURL ?? ""}`);
+  }
+  if (cfg.subscription) {
+    // No key to store: the CLI signs itself in and refreshes its own token.
+    lines.push(`OSCAR_AUTH=subscription`);
   }
   if (cfg.upstreamKey) {
     lines.push(`ANTHROPIC_API_KEY=${cfg.upstreamKey}`);
@@ -128,8 +136,16 @@ export async function main(): Promise<void> {
   let openAIModel: string | null = null;
   let openAIBaseURL: string | null = null;
   let upstreamKey: string | null = null;
+  let subscription = false;
 
-  if (preset.kind === "passthrough") {
+  if (preset.kind === "subscription") {
+    subscription = true;
+    console.log(
+      `\n${c.dim}Nothing to collect — the CLI signs in against your Anthropic\n` +
+      `account and refreshes its own credentials. Run ${c.reset}${c.bold}/login${c.reset}${c.dim} inside the\n` +
+      `CLI if you are not signed in yet; SSO, Bedrock and Vertex work as usual.${c.reset}\n`,
+    );
+  } else if (preset.kind === "passthrough") {
     upstreamKey = await askRequired(rl, "Anthropic API key");
   } else {
     useOpenAI = true;
@@ -183,11 +199,13 @@ export async function main(): Promise<void> {
     }
   }
 
-  const cfg: SetupConfig = { useOpenAI, openAIKey, openAIModel, openAIBaseURL, upstreamKey, port };
+  const cfg: SetupConfig = { useOpenAI, openAIKey, openAIModel, openAIBaseURL, upstreamKey, subscription, port };
 
   const summary = useOpenAI
     ? `provider:  ${preset.label}\nbase URL:  ${openAIBaseURL}\nmodel:     ${openAIModel}\nkey:       ${openAIKey ? openAIKey.slice(0, 4) + "..." : "(none)"}\nport:      ${port}`
-    : `provider:      ${preset.label}\nanthropic key: ${upstreamKey ? upstreamKey.slice(0, 4) + "..." : "(none)"}\nport:          ${port}`;
+    : subscription
+      ? `provider:  ${preset.label}\nauth:      handled by the CLI (no key stored)\nport:      ${port}`
+      : `provider:      ${preset.label}\nanthropic key: ${upstreamKey ? upstreamKey.slice(0, 4) + "..." : "(none)"}\nport:          ${port}`;
   console.log(`\n${box(summary)}\n`);
 
   const write = (await ask(rl, "Write .env?", "Y")).toLowerCase();

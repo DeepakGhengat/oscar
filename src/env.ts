@@ -1,5 +1,5 @@
 import { loadEnvFile } from "./envfile.ts";
-import type { ProxyConfig } from "./types.ts";
+import type { ProxyConfig, UpstreamAuthMode } from "./types.ts";
 
 loadEnvFile();
 
@@ -37,6 +37,25 @@ export function resolveUpstreamBaseURL(
     return url;
   }
   return UPSTREAM_DEFAULT;
+}
+
+/** How passthrough should authenticate.
+ *
+ * `subscription` means the CLI is signed in with an account — a Pro/Max/Team
+ * login or enterprise SSO — and carries its own short-lived OAuth credentials
+ * per request. There is no key for us to hold, and anything we add to the auth
+ * headers can only break the request, so the proxy stays out of the way.
+ *
+ * Explicit `OSCAR_AUTH` wins. Otherwise: no API key configured implies the CLI
+ * is signing itself in, because passthrough with neither is not a thing. */
+export function resolveUpstreamAuth(
+  declared: string | undefined,
+  apiKey: string | null,
+): UpstreamAuthMode {
+  const v = (declared ?? "").trim().toLowerCase();
+  if (v === "subscription" || v === "oauth" || v === "sso" || v === "login") return "subscription";
+  if (v === "api-key" || v === "apikey" || v === "key") return "api-key";
+  return apiKey ? "api-key" : "subscription";
 }
 
 /** Reads + validates the environment flags. Called per-request so test/runtime
@@ -79,6 +98,7 @@ export function loadConfig(): ProxyConfig {
     maxOutputTokens,
     upstreamKey,
     upstreamBaseURL,
+    upstreamAuth: resolveUpstreamAuth(process.env.OSCAR_AUTH, upstreamKey),
     port,
   };
 }

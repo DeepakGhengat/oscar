@@ -187,6 +187,13 @@ export interface OpenAIStreamChunk {
 
 /* ------------------------------- Proxy env ------------------------------- */
 
+/** How the upstream vendor API is authenticated in passthrough mode.
+ *
+ * `api-key`      — we hold the key and set `x-api-key` ourselves.
+ * `subscription` — the CLI is signed in (Pro/Max/Team, or enterprise SSO) and
+ *                  sends its own credentials. We must not touch them. */
+export type UpstreamAuthMode = "api-key" | "subscription";
+
 export interface ProxyConfig {
   useOpenAI: boolean;
   openAIKey: string | null;
@@ -196,5 +203,6 @@ export interface ProxyConfig {
   maxOutputTokens: number | null;
   upstreamKey: string | null;
   upstreamBaseURL: string;
+  upstreamAuth: UpstreamAuthMode;
   port: number;
 }

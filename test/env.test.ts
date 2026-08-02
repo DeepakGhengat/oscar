@@ -203,6 +203,7 @@ test("every ProxyConfig field is populated", () => {
     maxOutputTokens: 2048,
     upstreamKey: "ant-key",
     upstreamBaseURL: "https://api.anthropic.com",
+    upstreamAuth: "api-key",
     port: 8080,
   });
 });
